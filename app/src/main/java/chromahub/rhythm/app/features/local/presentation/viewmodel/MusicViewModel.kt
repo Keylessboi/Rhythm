@@ -7967,7 +7967,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
         try {
             val updatedMetadata = currentItem.mediaMetadata.buildUpon()
-                .setFolderType(currentItem.mediaMetadata.folderType)
+                .setMediaType(currentItem.mediaMetadata.mediaType)
                 .build()
             val updatedItem = currentItem.buildUpon()
                 .setMediaMetadata(updatedMetadata)

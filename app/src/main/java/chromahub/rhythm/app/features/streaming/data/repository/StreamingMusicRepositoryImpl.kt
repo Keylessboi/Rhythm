@@ -94,7 +94,9 @@ class StreamingMusicRepositoryImpl(
     private val followedPlaylistIds = linkedSetOf<String>()
 
     private val songCache = LinkedHashMap<String, StreamingSong>()
-    private val artistArtworkCache = LinkedHashMap<String, String>()
+    // Read from Default/IO dispatchers (catalog grouping, Deezer enrichment) and written from
+    // several coroutines, so it must be thread-safe.
+    private val artistArtworkCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val providerAlbumCache = LinkedHashMap<String, StreamingAlbum>()
 
     private val downloadDirectory by lazy {
@@ -1603,6 +1605,14 @@ class StreamingMusicRepositoryImpl(
 
     private suspend fun replaceCatalog(songs: List<StreamingSong>) {
         val serviceId = activeServiceId()
+        // Only populate albumsFlow with derived albums if no provider albums are cached
+        val deriveAlbums = providerAlbumCache.isEmpty()
+        // Grouping thousands of songs into albums/artists is CPU work; keep it off the caller's
+        // (main) dispatcher. Shared caches are still mutated on the caller's thread below.
+        val (derivedAlbums, rawArtists) = withContext(Dispatchers.Default) {
+            (if (deriveAlbums) buildAlbumItems(serviceId, songs) else null) to
+                buildArtistItems(serviceId, songs)
+        }
 
         songCache.clear()
         songs.forEach { song ->
@@ -1610,11 +1620,9 @@ class StreamingMusicRepositoryImpl(
         }
 
         songsFlow.value = songs
-        // Only populate albumsFlow with derived albums if no provider albums are cached
-        if (providerAlbumCache.isEmpty()) {
-            albumsFlow.value = buildAlbumItems(serviceId, songs)
+        if (derivedAlbums != null) {
+            albumsFlow.value = derivedAlbums
         }
-        val rawArtists = buildArtistItems(serviceId, songs)
         if (artistsFlow.value.isEmpty() || rawArtists.size >= artistsFlow.value.size) {
             artistsFlow.value = rawArtists
         }

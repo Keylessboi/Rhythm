@@ -660,7 +660,7 @@ class SubsonicApiClient(context: Context) {
             .addQueryParameter("u", cred.username)
 
         if (usePasswordAuth) {
-            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).toLowerHex()
             urlBuilder.addQueryParameter("p", obfuscated)
         } else {
             val (token, salt) = generateAuthParams(cred.password)
@@ -721,7 +721,7 @@ class SubsonicApiClient(context: Context) {
             .addQueryParameter("u", cred.username)
 
         if (usePasswordAuth) {
-            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).toLowerHex()
             urlBuilder.addQueryParameter("p", obfuscated)
         } else {
             val (token, salt) = getStableCoverArtAuthParams(cred.password)
@@ -827,7 +827,7 @@ class SubsonicApiClient(context: Context) {
             .addQueryParameter("u", cred.username)
 
         if (usePasswordAuth) {
-            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).toLowerHex()
             builder.addQueryParameter("p", obfuscated)
         } else {
             val (token, salt) = generateAuthParams(cred.password)
@@ -1035,14 +1035,25 @@ class SubsonicApiClient(context: Context) {
     }
 
     private fun getStableCoverArtAuthParams(password: String): Pair<String, String> {
+        // Deterministic per password, and requested for every parsed song/album/artist, so
+        // compute it once instead of two MD5s per cover-art URL.
+        stableCoverArtAuth?.let { cached ->
+            if (cached.password == password) return cached.token to cached.salt
+        }
         val salt = md5(password).take(8)
         val token = md5(password + salt)
+        stableCoverArtAuth = StableCoverArtAuth(password, token, salt)
         return token to salt
     }
 
+    private class StableCoverArtAuth(val password: String, val token: String, val salt: String)
+
+    @Volatile
+    private var stableCoverArtAuth: StableCoverArtAuth? = null
+
     private fun md5(value: String): String {
         val digest = MessageDigest.getInstance("MD5").digest(value.toByteArray(Charsets.UTF_8))
-        return digest.joinToString(separator = "") { "%02x".format(it) }
+        return digest.toLowerHex()
     }
 
     private fun loadCredentials(): Credentials? {
@@ -1121,4 +1132,21 @@ class SubsonicApiClient(context: Context) {
         private const val API_VERSION = "1.16.1"
         private const val CLIENT_ID = "Rhythm"
     }
+}
+
+private val LOWER_HEX_DIGITS = "0123456789abcdef".toCharArray()
+
+/**
+ * Lower-case hex encoding. Replaces `joinToString { "%02x".format(it) }`, which runs
+ * String.format per byte; it was on the main-thread stack of an ANR while signing thousands of
+ * stream URLs during a library sync.
+ */
+internal fun ByteArray.toLowerHex(): String {
+    val out = CharArray(size * 2)
+    for (i in indices) {
+        val v = this[i].toInt() and 0xff
+        out[i * 2] = LOWER_HEX_DIGITS[v ushr 4]
+        out[i * 2 + 1] = LOWER_HEX_DIGITS[v and 0x0f]
+    }
+    return String(out)
 }

@@ -1434,7 +1434,7 @@ class StreamingMusicRepositoryImpl(
             else -> Result.success(emptyList())
         }.getOrElse { emptyList() }
 
-        val mappedSongs = providerSongs.map { mapProviderSong(serviceId, it) }
+        val mappedSongs = mapProviderSongs(serviceId, providerSongs)
         syncLikedSongIdsFromProviderSongs(serviceId, providerSongs)
         replaceCatalog(mappedSongs)
         
@@ -1702,6 +1702,22 @@ class StreamingMusicRepositoryImpl(
         }
     }
 
+    /**
+     * Maps a batch of provider songs on [Dispatchers.Default]. Each song builds a signed stream
+     * URL (salt + MD5 + URL parse), so a full catalog sync of thousands of songs must not run on
+     * the caller's dispatcher: callers are ViewModel coroutines on the main thread, and doing it
+     * there blocked input for 20+ seconds ("Input dispatching timed out" ANR).
+     */
+    private suspend fun mapProviderSongs(
+        serviceId: String,
+        providerSongs: List<ProviderSong>
+    ): List<StreamingSong> {
+        if (providerSongs.isEmpty()) return emptyList()
+        return withContext(Dispatchers.Default) {
+            providerSongs.map { mapProviderSong(serviceId, it) }
+        }
+    }
+
     private fun mapProviderSong(serviceId: String, providerSong: ProviderSong): StreamingSong {
         val encodedId = encodeSongId(serviceId, providerSong.providerId)
         val sourceType = serviceToSourceType(serviceId)
@@ -1746,8 +1762,7 @@ class StreamingMusicRepositoryImpl(
             else -> Result.success(emptyList())
         }
 
-        return result.getOrElse { emptyList() }
-            .map { mapProviderSong(serviceId, it) }
+        return mapProviderSongs(serviceId, result.getOrElse { emptyList() })
     }
 
     private fun mapProviderPlaylist(

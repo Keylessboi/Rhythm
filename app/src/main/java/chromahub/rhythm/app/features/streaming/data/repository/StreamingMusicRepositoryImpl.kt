@@ -1031,7 +1031,7 @@ class StreamingMusicRepositoryImpl(
             else -> Result.success(emptyList())
         }.getOrElse { emptyList() }
 
-                return providerArtists.map { mapProviderArtist(serviceId, it) }
+                return mapProviderArtists(serviceId, providerArtists)
     }
 
     override suspend fun downloadSong(song: StreamingSong): Boolean {
@@ -1373,7 +1373,7 @@ class StreamingMusicRepositoryImpl(
         }.getOrElse { emptyList() }
 
         if (providerArtists.isNotEmpty()) {
-            return providerArtists.map { mapProviderArtist(serviceId, it) }
+            return mapProviderArtists(serviceId, providerArtists)
         }
 
         val songs = searchSongs(query).filterIsInstance<StreamingSong>()
@@ -1908,10 +1908,44 @@ class StreamingMusicRepositoryImpl(
         return enrichArtistsWithDeezerImages(buildArtistItems(serviceId, songs))
     }
 
-    private fun mapProviderArtist(serviceId: String, providerArtist: ProviderArtist): StreamingArtist {
-        val cachedArtistSongs = cachedSongsForArtist(providerArtist.name)
-        val cachedArtist = buildArtistItems(serviceId, cachedArtistSongs)
-            .firstOrNull { it.name.equals(providerArtist.name, ignoreCase = true) }
+    /**
+     * Maps a provider artist list on [Dispatchers.Default], resolving cached songs through an
+     * [ArtistSongIndex] built once for the batch. Scanning the song cache per artist on the
+     * caller's (main) dispatcher cost ~2 s per sync and caused "Input dispatching timed out" ANRs
+     * from syncArtists()/searchArtists() on large libraries.
+     */
+    private suspend fun mapProviderArtists(
+        serviceId: String,
+        providerArtists: List<ProviderArtist>
+    ): List<StreamingArtist> {
+        if (providerArtists.isEmpty()) return emptyList()
+        // Snapshot the shared caches on the caller's thread; they are not thread-safe.
+        val candidateSongs = songsFlow.value.filterIsInstance<StreamingSong>() +
+            songCache.values.toList() + downloadedSongsMap.values.toList()
+        val separatorEnabled = appSettings.artistSeparatorEnabled.value
+        val separatorDelimiters = appSettings.artistSeparatorDelimiters.value
+            .ifBlank { AppSettings.DEFAULT_ARTIST_SEPARATOR_DELIMITERS }
+        return withContext(Dispatchers.Default) {
+            val index = ArtistSongIndex(candidateSongs) { artist ->
+                ArtistSeparator.splitArtistNames(artist, delimiters = separatorDelimiters, enabled = separatorEnabled)
+            }
+            providerArtists.map { mapProviderArtist(serviceId, it, index) }
+        }
+    }
+
+    private fun mapProviderArtist(
+        serviceId: String,
+        providerArtist: ProviderArtist,
+        artistSongIndex: ArtistSongIndex? = null
+    ): StreamingArtist {
+        // Only needed when the provider omitted artwork or counts.
+        val cachedArtistSongs by lazy {
+            artistSongIndex?.songsFor(providerArtist.name) ?: cachedSongsForArtist(providerArtist.name)
+        }
+        val cachedArtist by lazy {
+            buildArtistItems(serviceId, cachedArtistSongs)
+                .firstOrNull { it.name.equals(providerArtist.name, ignoreCase = true) }
+        }
 
         return StreamingArtist(
             id = buildArtistId(serviceId, providerArtist.name),
@@ -2093,7 +2127,7 @@ class StreamingMusicRepositoryImpl(
     }
 
     private fun normalizeKey(value: String): String {
-        return value.trim().lowercase().replace("\\s+".toRegex(), "_")
+        return value.trim().lowercase().replace(WHITESPACE_REGEX, "_")
     }
 
     private fun trimSongCache() {
@@ -2293,10 +2327,14 @@ class StreamingMusicRepositoryImpl(
         if (!isServiceConnected(serviceId)) return emptyList()
 
         return try {
-            val providerArtists = when (serviceId) {
-                StreamingServiceId.SUBSONIC -> subsonicClient.getArtists().getOrNull()
-                StreamingServiceId.JELLYFIN -> jellyfinClient.getArtists().getOrNull()
-                else -> null
+            // The provider clients parse the response (and sign a cover-art URL per artist) in
+            // the calling coroutine, so fetch on IO rather than the caller's main dispatcher.
+            val providerArtists = withContext(Dispatchers.IO) {
+                when (serviceId) {
+                    StreamingServiceId.SUBSONIC -> subsonicClient.getArtists().getOrNull()
+                    StreamingServiceId.JELLYFIN -> jellyfinClient.getArtists().getOrNull()
+                    else -> null
+                }
             }
             providerArtists?.forEach { artist ->
                 if (!artist.artworkUrl.isNullOrBlank()) {
@@ -2304,7 +2342,7 @@ class StreamingMusicRepositoryImpl(
                 }
             }
             if (!providerArtists.isNullOrEmpty()) {
-                val directArtists = providerArtists.map { mapProviderArtist(serviceId, it) }
+                val directArtists = mapProviderArtists(serviceId, providerArtists)
                 artistsFlow.value = directArtists
                 updateFollowedArtistsFlow()
                 Log.d("StreamingMusicRepo", "Synced ${directArtists.size} artists directly from provider")
@@ -2325,5 +2363,8 @@ class StreamingMusicRepositoryImpl(
     private companion object {
         private const val SEARCH_LIMIT = 100
         private const val MAX_CACHE_SIZE = 4000
+
+        /** Compiled once; normalizeKey() runs per artist during catalog mapping. */
+        private val WHITESPACE_REGEX = "\\s+".toRegex()
     }
 }

@@ -478,7 +478,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 }
                 checkAndSyncAuthentication(normalizedServiceId)
                 loadHomeContent()
-                loadLibrary()
+                loadLibrary(forceSync = true)
                 
                 // Show success notification
                 notificationManager.notifyAuthenticationSuccess(getSourceTypeName(sourceTypeFromServiceId(normalizedServiceId)))
@@ -645,7 +645,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             checkAndSyncAuthentication(forceCheck = true)
             loadHomeContent()
-            loadLibrary()
+            loadLibrary(forceSync = true)
         }
     }
 
@@ -653,7 +653,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
      * Refresh library content.
      */
     fun refreshLibrary() {
-        loadLibrary()
+        loadLibrary(forceSync = true)
     }
     
     /**
@@ -702,12 +702,67 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
     
     /**
      * Load user's library content.
+     * @param forceSync If true, performs a full network sync and shows notifications.
+     *                  If false, loads quickly from disk/memory cache without notifications or server overhead.
      */
-    fun loadLibrary() {
+    fun loadLibrary(forceSync: Boolean = false) {
         viewModelScope.launch {
             _isLoading.value = true
-            _hasLoadedLibrary.value = false
             val serviceName = getSourceTypeName(_currentService.value)
+
+            // Fast path: if not forced and cache exists, load immediately from disk without network sync or notifications
+            if (!forceSync && repository.hasCachedCatalog()) {
+                try {
+                    val likedSongs = try { repository.getLikedSongs().first() } catch (e: Exception) { emptyList() }
+                    val followedArtists = try { repository.getFollowedArtists().first() } catch (e: Exception) { emptyList() }
+                    val downloadedSongs = try { repository.getDownloadedSongs().first() } catch (e: Exception) { emptyList() }
+                    val savedPlaylists = try {
+                        repository.getPlaylists().first().filterIsInstance<StreamingPlaylist>()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    val savedAlbums = try { repository.getSavedAlbums().first() } catch (e: Exception) { emptyList() }
+                    val catalogSongs = try {
+                        repository.getSongs().first().filterIsInstance<StreamingSong>()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    val catalogArtists = try {
+                        repository.getArtists().first()
+                            .filterIsInstance<StreamingArtist>()
+                            .distinctBy { it.id }
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+
+                    _likedSongs.value = likedSongs
+                    _savedAlbums.value = savedAlbums
+                    _followedArtists.value = catalogArtists.ifEmpty { followedArtists }
+                    _savedPlaylists.value = savedPlaylists
+                    _downloadedSongs.value = downloadedSongs
+                    _downloadedAlbums.value = deriveAlbumsFromSongs(downloadedSongs, limit = 500)
+                    _downloadedArtists.value = deriveArtistsFromSongs(downloadedSongs, limit = 500)
+                    if (catalogSongs.isNotEmpty()) {
+                        _allSongs.value = catalogSongs
+                    }
+                    if (_featuredPlaylists.value.isEmpty()) {
+                        _featuredPlaylists.value = savedPlaylists
+                    }
+                    _syncProgress.value = StreamingSyncProgress(
+                        isSyncing = false,
+                        songsCount = _allSongs.value.size,
+                        stage = StreamingSyncStage.Complete
+                    )
+                    _hasLoadedLibrary.value = true
+                    _isLoading.value = false
+                    Log.d("StreamingMusicViewModel", "Loaded library instantly from disk cache: ${_allSongs.value.size} songs")
+                    return@launch
+                } catch (e: Exception) {
+                    Log.w("StreamingMusicViewModel", "Fast cache load failed, falling back to network sync", e)
+                }
+            }
+
+            _hasLoadedLibrary.value = false
             var syncSuccess = false
             
             try {

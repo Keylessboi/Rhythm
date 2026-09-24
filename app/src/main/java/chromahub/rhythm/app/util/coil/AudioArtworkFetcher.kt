@@ -27,6 +27,7 @@ import java.io.ByteArrayInputStream
 
 import android.content.ContentUris
 import androidx.core.net.toUri
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import chromahub.rhythm.app.infrastructure.provider.RhythmAlbumArtProvider
 
 /**
@@ -161,26 +162,42 @@ class AudioArtworkKeyer : Keyer<Uri> {
  */
 class StreamingArtworkKeyer : Keyer<Uri> {
     override fun key(data: Uri, options: Options): String? {
-        val scheme = data.scheme ?: return null
-        if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) {
+        return keyFromUrlString(data.toString())
+    }
+
+    companion object {
+        fun keyFromUrlString(url: String): String? {
+            val httpUrl = url.toHttpUrlOrNull() ?: return null
+            val scheme = httpUrl.scheme
+            if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) {
+                return null
+            }
+            val host = httpUrl.host
+            val path = httpUrl.encodedPath
+
+            // Subsonic cover art: /rest/getCoverArt or /rest/getCoverArt.view
+            if (path.contains("getCoverArt", ignoreCase = true)) {
+                val id = httpUrl.queryParameter("id") ?: return null
+                val size = httpUrl.queryParameter("size") ?: "500"
+                return "streaming_subsonic_${host}_${id}_${size}"
+            }
+
+            // Jellyfin Item Primary image: /Items/{id}/Images/...
+            if (path.contains("/Images/", ignoreCase = true)) {
+                val maxWidth = httpUrl.queryParameter("maxWidth") ?: "500"
+                return "streaming_jellyfin_${host}_${path}_${maxWidth}"
+            }
+
             return null
         }
-        val host = data.host ?: return null
-        val path = data.path ?: return null
+    }
+}
 
-        // Subsonic cover art: /rest/getCoverArt or /rest/getCoverArt.view
-        if (path.contains("getCoverArt", ignoreCase = true)) {
-            val id = data.getQueryParameter("id") ?: return null
-            val size = data.getQueryParameter("size") ?: "500"
-            return "streaming_subsonic_${host}_${id}_${size}"
-        }
-
-        // Jellyfin Item Primary image: /Items/{id}/Images/...
-        if (path.contains("/Images/", ignoreCase = true)) {
-            val maxWidth = data.getQueryParameter("maxWidth") ?: "500"
-            return "streaming_jellyfin_${host}_${path}_${maxWidth}"
-        }
-
-        return null
+/**
+ * Canonical keyer for streaming service artwork String URLs (Subsonic & Jellyfin).
+ */
+class StreamingArtworkStringKeyer : Keyer<String> {
+    override fun key(data: String, options: Options): String? {
+        return StreamingArtworkKeyer.keyFromUrlString(data)
     }
 }

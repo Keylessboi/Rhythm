@@ -17,11 +17,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import androidx.core.content.edit
+import chromahub.rhythm.app.shared.data.model.LyricsData
 
 class SubsonicErrorException(val code: Int, message: String) : Exception(message)
 
@@ -521,6 +523,115 @@ class SubsonicApiClient(context: Context) {
         return requestAndParse("deletePlaylist", mapOf("id" to playlistId)).map { true }
     }
 
+    /**
+     * Fetches lyrics for a song from Subsonic/Navidrome.
+     * First attempts OpenSubsonic getLyricsBySongId (supports synced structured lyrics).
+     * If unavailable, falls back to legacy getLyrics(artist, title).
+     */
+    suspend fun getLyrics(
+        songId: String,
+        artist: String? = null,
+        title: String? = null
+    ): Result<LyricsData?> {
+        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (songId.isBlank()) return Result.failure(IllegalArgumentException("Song id is required"))
+
+        return withContext(Dispatchers.IO) {
+            // 1. Try OpenSubsonic getLyricsBySongId
+            val openSubsonicResult = requestAndParse("getLyricsBySongId", mapOf("id" to songId))
+            if (openSubsonicResult.isSuccess) {
+                val response = openSubsonicResult.getOrThrow()
+                val lyricsList = response.optJSONObject("lyricsList")
+                val structuredLyricsObj = lyricsList?.opt("structuredLyrics")
+                val structuredLyricsList: List<JSONObject> = when (structuredLyricsObj) {
+                    null -> emptyList()
+                    is JSONArray -> (0 until structuredLyricsObj.length()).mapNotNull { structuredLyricsObj.optJSONObject(it) }
+                    is JSONObject -> listOf(structuredLyricsObj)
+                    else -> emptyList()
+                }
+
+                if (structuredLyricsList.isNotEmpty()) {
+                    // Prefer synced lyrics if available
+                    val targetLyrics = structuredLyricsList.firstOrNull { it.optBoolean("synced", false) }
+                        ?: structuredLyricsList.first()
+
+                    val isSynced = targetLyrics.optBoolean("synced", false)
+                    val offset = targetLyrics.optLong("offset", 0L)
+                    val linesObj = targetLyrics.opt("line")
+                    val linesList: List<JSONObject> = when (linesObj) {
+                        null -> emptyList()
+                        is JSONArray -> (0 until linesObj.length()).mapNotNull { linesObj.optJSONObject(it) }
+                        is JSONObject -> listOf(linesObj)
+                        else -> emptyList()
+                    }
+
+                    if (linesList.isNotEmpty()) {
+                        val plainLines = mutableListOf<String>()
+                        val syncedLines = mutableListOf<String>()
+
+                        for (lineObj in linesList) {
+                            val text = lineObj.optString("value", "")
+                            plainLines.add(text)
+                            if (isSynced) {
+                                val startMs = (lineObj.optLong("start", 0L) + offset).coerceAtLeast(0L)
+                                syncedLines.add("${formatLrcTimestamp(startMs)}$text")
+                            }
+                        }
+
+                        val plainLyrics = plainLines.joinToString("\n").takeIf { it.isNotBlank() }
+                        val syncedLyrics = if (isSynced) syncedLines.joinToString("\n").takeIf { it.isNotBlank() } else null
+
+                        if (plainLyrics != null || syncedLyrics != null) {
+                            return@withContext Result.success(
+                                LyricsData(
+                                    plainLyrics = plainLyrics,
+                                    syncedLyrics = syncedLyrics,
+                                    source = "Navidrome (Subsonic)"
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 2. Fallback to legacy getLyrics(artist, title)
+            if (!artist.isNullOrBlank() && !title.isNullOrBlank()) {
+                val legacyResult = requestAndParse("getLyrics", mapOf("artist" to artist, "title" to title))
+                if (legacyResult.isSuccess) {
+                    val lyricsObj = legacyResult.getOrThrow().optJSONObject("lyrics")
+                    val content = lyricsObj?.optString("value", lyricsObj.optString("content", "")).orEmpty().trim()
+                    if (content.isNotBlank()) {
+                        val isLrc = content.lines().any { it.trim().matches(Regex("^\\[\\d{2}:\\d{2}.*?\\].*")) }
+                        val plainLyrics = if (isLrc) {
+                            content.lines().joinToString("\n") { it.replace(Regex("^\\[\\d{2}:\\d{2}.*?\\]"), "").trim() }
+                        } else {
+                            content
+                        }
+                        val syncedLyrics = if (isLrc) content else null
+
+                        return@withContext Result.success(
+                            LyricsData(
+                                plainLyrics = plainLyrics.takeIf { it.isNotBlank() },
+                                syncedLyrics = syncedLyrics?.takeIf { it.isNotBlank() },
+                                source = "Navidrome (Subsonic)"
+                            )
+                        )
+                    }
+                }
+            }
+
+            Result.success(null)
+        }
+    }
+
+    private fun formatLrcTimestamp(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        val hundredths = (ms % 1000) / 10
+        return String.format(java.util.Locale.US, "[%02d:%02d.%02d]", minutes, seconds, hundredths)
+    }
+
     fun buildStreamUrl(songId: String, maxBitRateKbps: Int = 0, format: String? = null): String? {
         val cred = credentials ?: return null
         if (songId.isBlank()) return null
@@ -711,10 +822,18 @@ class SubsonicApiClient(context: Context) {
         val id = song.optString("id", "")
         if (id.isBlank()) return null
 
-        val coverArtId = song.optString("coverArt").takeIf { it.isNotBlank() }
-            ?: song.optString("albumId").takeIf { it.isNotBlank() }
-            ?: song.optString("parent").takeIf { it.isNotBlank() }
-            ?: id
+        val rawAlbumId = song.optString("albumId").takeIf { it.isNotBlank() }
+        val rawCoverArt = song.optString("coverArt").takeIf { it.isNotBlank() }
+        val parent = song.optString("parent").takeIf { it.isNotBlank() }
+
+        // Prefer albumId over track-level 'mf-' IDs to reuse cached album art and prevent per-file ffmpeg extraction
+        val coverArtId = when {
+            rawCoverArt != null && !rawCoverArt.startsWith("mf-") -> rawCoverArt
+            rawAlbumId != null -> rawAlbumId
+            rawCoverArt != null -> rawCoverArt
+            parent != null -> parent
+            else -> id
+        }
         
         val rawTrack = song.optString("track", "")
         val trackNum = song.optInt("track", 0).takeIf { it > 0 }

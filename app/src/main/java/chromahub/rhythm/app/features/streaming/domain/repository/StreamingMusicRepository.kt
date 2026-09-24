@@ -12,6 +12,7 @@ import chromahub.rhythm.app.features.streaming.domain.model.StreamingAlbum
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingArtist
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingPlaylist
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingSong
+import chromahub.rhythm.app.shared.data.model.LyricsData
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -260,4 +261,14 @@ interface StreamingMusicRepository : MusicRepository {
      * Report that playback has stopped (scrobbling)
      */
     suspend fun reportPlaybackStop(songId: String, positionMs: Long): Boolean
+
+    /**
+     * Get lyrics for a song from the active streaming service.
+     */
+    suspend fun getLyrics(songId: String, artist: String? = null, title: String? = null): LyricsData?
+
+    /**
+     * Checks if there is a cached catalog available on disk or in memory for the given service.
+     */
+    fun hasCachedCatalog(serviceId: String? = null): Boolean
 }

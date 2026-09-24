@@ -16,6 +16,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import okhttp3.Dispatcher
 import chromahub.rhythm.app.infrastructure.widget.glance.GlanceShapeBitmaps
 import chromahub.rhythm.app.infrastructure.widget.glance.RhythmCookieWidget
 import chromahub.rhythm.app.infrastructure.widget.glance.RhythmMusicWidget
@@ -134,10 +135,20 @@ class RhythmApplication : Application(), ImageLoaderFactory {
      * cache at 25% of heap, which is far too large for an offline music app — bound both explicitly.
      */
     override fun newImageLoader(): ImageLoader {
+        val imageOkHttpClient = chromahub.rhythm.app.features.streaming.data.provider.UserTrustManager
+            .buildUserTrustingHttpClientBuilder()
+            .dispatcher(Dispatcher().apply {
+                maxRequests = 16
+                maxRequestsPerHost = 4
+            })
+            .build()
+
         return ImageLoader.Builder(this)
+            .okHttpClient(imageOkHttpClient)
             .components {
                 add(chromahub.rhythm.app.util.coil.AudioArtworkKeyer())
                 add(chromahub.rhythm.app.util.coil.StreamingArtworkKeyer())
+                add(chromahub.rhythm.app.util.coil.StreamingArtworkStringKeyer())
                 add(chromahub.rhythm.app.util.coil.AudioArtworkFetcher.Factory(applicationContext))
             }
             .memoryCache {

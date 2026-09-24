@@ -29,6 +29,7 @@ import chromahub.rhythm.app.features.streaming.domain.model.StreamingServiceId
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingSong
 import chromahub.rhythm.app.features.streaming.domain.repository.StreamingMusicRepository
 import chromahub.rhythm.app.shared.data.model.AppSettings
+import chromahub.rhythm.app.shared.data.model.LyricsData
 import chromahub.rhythm.app.network.NetworkClient
 import chromahub.rhythm.app.network.DeezerApiService
 import android.net.Uri
@@ -45,6 +46,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+
+/**
+ * Data model for persisting the streaming catalog to disk.
+ */
+data class StreamingCatalogCache(
+    val serviceId: String,
+    val songs: List<StreamingSong> = emptyList(),
+    val albums: List<StreamingAlbum> = emptyList(),
+    val artists: List<StreamingArtist> = emptyList(),
+    val playlists: List<StreamingPlaylist> = emptyList(),
+    val likedSongIds: List<String> = emptyList(),
+    val lastSyncTimestamp: Long = 0L
+)
 
 /**
  * Provider-backed implementation used by Rhythm GO mode.
@@ -97,6 +111,12 @@ class StreamingMusicRepositoryImpl(
 
     init {
         loadDownloadedSongsIndex()
+        loadCatalogCacheForActiveService()
+        repositoryScope.launch {
+            appSettings.streamingService.collect { serviceId ->
+                loadCatalogCacheForActiveService(normalizeServiceId(serviceId))
+            }
+        }
     }
 
     private fun loadDownloadedSongsIndex() {
@@ -162,6 +182,104 @@ class StreamingMusicRepositoryImpl(
         return java.io.File(downloadDirectory, "$safeName.mp3")
     }
 
+    fun getCatalogCacheFile(serviceId: String): java.io.File {
+        return java.io.File(context.filesDir, "streaming_catalog_${serviceId}.json")
+    }
+
+    private fun loadCatalogCacheForActiveService(targetServiceId: String? = null) {
+        try {
+            val serviceId = targetServiceId ?: activeServiceId()
+            val cacheFile = getCatalogCacheFile(serviceId)
+            if (!cacheFile.exists()) return
+
+            val json = cacheFile.readText()
+            val cache = gson.fromJson(json, StreamingCatalogCache::class.java) ?: return
+            if (cache.serviceId != serviceId) return
+
+            if (cache.songs.isNotEmpty()) {
+                songCache.clear()
+                cache.songs.forEach { song ->
+                    songCache[song.id] = song
+                }
+                songsFlow.value = cache.songs
+
+                if (cache.albums.isNotEmpty()) {
+                    providerAlbumCache.clear()
+                    cache.albums.forEach { album ->
+                        providerAlbumCache[album.id] = album
+                    }
+                    providerAlbumsFlow.value = cache.albums
+                    albumsFlow.value = cache.albums
+                } else {
+                    albumsFlow.value = buildAlbumItems(serviceId, cache.songs)
+                }
+
+                if (cache.artists.isNotEmpty()) {
+                    artistsFlow.value = cache.artists
+                } else {
+                    artistsFlow.value = buildArtistItems(serviceId, cache.songs)
+                }
+
+                if (cache.playlists.isNotEmpty()) {
+                    playlistsFlow.value = cache.playlists
+                }
+
+                if (cache.likedSongIds.isNotEmpty()) {
+                    likedSongIds.clear()
+                    likedSongIds.addAll(cache.likedSongIds)
+                }
+
+                updateLikedSongsFlow()
+                updateSavedAlbumsFlow()
+                updateFollowedArtistsFlow()
+                Log.d("StreamingMusicRepo", "Loaded cached catalog for $serviceId with ${cache.songs.size} songs")
+            }
+        } catch (e: Exception) {
+            Log.e("StreamingMusicRepo", "Error loading streaming catalog cache", e)
+        }
+    }
+
+    private fun saveCatalogCache(serviceId: String = activeServiceId()) {
+        if (appSettings.offlineMode.value) return
+        repositoryScope.launch(Dispatchers.IO) {
+            try {
+                val currentSongs = songsFlow.value.filterIsInstance<StreamingSong>()
+                if (currentSongs.isEmpty()) return@launch
+
+                val currentAlbums = (providerAlbumsFlow.value.ifEmpty { albumsFlow.value })
+                    .filterIsInstance<StreamingAlbum>()
+                val currentArtists = artistsFlow.value.filterIsInstance<StreamingArtist>()
+                val currentPlaylists = playlistsFlow.value.filterIsInstance<StreamingPlaylist>()
+                val currentLikedIds = likedSongIds.toList()
+
+                val cache = StreamingCatalogCache(
+                    serviceId = serviceId,
+                    songs = currentSongs,
+                    albums = currentAlbums,
+                    artists = currentArtists,
+                    playlists = currentPlaylists,
+                    likedSongIds = currentLikedIds,
+                    lastSyncTimestamp = System.currentTimeMillis()
+                )
+
+                val cacheFile = getCatalogCacheFile(serviceId)
+                cacheFile.writeText(gson.toJson(cache))
+                Log.d("StreamingMusicRepo", "Saved streaming catalog cache for $serviceId (${currentSongs.size} songs)")
+            } catch (e: Exception) {
+                Log.e("StreamingMusicRepo", "Error saving streaming catalog cache for $serviceId", e)
+            }
+        }
+    }
+
+    override fun hasCachedCatalog(serviceId: String?): Boolean {
+        val targetService = serviceId ?: activeServiceId()
+        if (songsFlow.value.isNotEmpty() && activeServiceId() == targetService) {
+            return true
+        }
+        val cacheFile = getCatalogCacheFile(targetService)
+        return cacheFile.exists() && cacheFile.length() > 0
+    }
+
     override val currentService: SourceType
         get() = serviceToSourceType(activeServiceId())
 
@@ -188,12 +306,22 @@ class StreamingMusicRepositoryImpl(
     }
 
     suspend fun disconnect(serviceId: String) {
-        when (normalizeServiceId(serviceId)) {
+        val normalized = normalizeServiceId(serviceId)
+        when (normalized) {
             StreamingServiceId.SUBSONIC -> subsonicClient.logout()
             StreamingServiceId.JELLYFIN -> jellyfinClient.logout()
         }
 
-        if (activeServiceId() == normalizeServiceId(serviceId)) {
+        try {
+            val cacheFile = getCatalogCacheFile(normalized)
+            if (cacheFile.exists()) {
+                cacheFile.delete()
+            }
+        } catch (e: Exception) {
+            Log.e("StreamingMusicRepo", "Error deleting catalog cache on disconnect", e)
+        }
+
+        if (activeServiceId() == normalized) {
             clearInMemoryCatalog()
         }
     }
@@ -1223,6 +1351,7 @@ class StreamingMusicRepositoryImpl(
         // Also sync playlists
         syncPlaylists()
         
+        saveCatalogCache(serviceId)
         return mappedSongs
     }
 
@@ -1266,6 +1395,7 @@ class StreamingMusicRepositoryImpl(
         }
 
         playlistsFlow.value = playlists
+        saveCatalogCache(serviceId)
         return playlists
     }
 
@@ -1366,6 +1496,21 @@ class StreamingMusicRepositoryImpl(
         return getAlbumSongs(albumId)
     }
 
+    override suspend fun getLyrics(songId: String, artist: String?, title: String?): LyricsData? {
+        if (appSettings.offlineMode.value) return null
+        val decoded = decodeSongId(songId)
+        val serviceId = decoded?.first ?: activeServiceId()
+        val providerSongId = decoded?.second ?: songId
+
+        if (!isServiceConnected(serviceId)) return null
+
+        return when (serviceId) {
+            StreamingServiceId.SUBSONIC -> subsonicClient.getLyrics(providerSongId, artist, title).getOrNull()
+            StreamingServiceId.JELLYFIN -> jellyfinClient.getLyrics(providerSongId, artist, title).getOrNull()
+            else -> null
+        }
+    }
+
     private suspend fun replaceCatalog(songs: List<StreamingSong>) {
         val serviceId = activeServiceId()
 
@@ -1388,12 +1533,15 @@ class StreamingMusicRepositoryImpl(
         updateSavedAlbumsFlow()
         updateFollowedArtistsFlow()
 
+        saveCatalogCache(serviceId)
+
         // Asynchronously enrich with Deezer images in background to avoid blocking
         repositoryScope.launch {
             try {
                 val enriched = enrichArtistsWithDeezerImages(rawArtists)
                 artistsFlow.value = enriched
                 updateFollowedArtistsFlow()
+                saveCatalogCache(serviceId)
             } catch (e: Exception) {
                 Log.e("StreamingMusicRepo", "Background Deezer artist enrichment failed", e)
             }

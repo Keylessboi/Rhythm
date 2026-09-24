@@ -122,7 +122,7 @@ class SubsonicApiClient(context: Context) {
             "songCount" to limit.coerceIn(1, 100).toString()
         )
 
-        return requestAndParse("search3", params).map { response ->
+        return requestAndParse("search3", params) { response ->
             parseSongList(response.optJSONObject("searchResult3")?.opt("song"))
         }
     }
@@ -139,7 +139,7 @@ class SubsonicApiClient(context: Context) {
             "albumCount" to limit.coerceIn(1, 100).toString()
         )
 
-        return requestAndParse("search3", params).map { response ->
+        return requestAndParse("search3", params) { response ->
             parseAlbumListCompat(response.optJSONObject("searchResult3")?.opt("album"))
         }
     }
@@ -149,7 +149,7 @@ class SubsonicApiClient(context: Context) {
             return Result.failure(IllegalStateException("Subsonic service is not connected"))
         }
 
-        return requestAndParse("getArtists", emptyMap()).map { response ->
+        return requestAndParse("getArtists", emptyMap()) { response ->
             val artistsObj = response.optJSONObject("artists")
             val indexElement = artistsObj?.opt("index")
             val result = mutableListOf<ProviderArtist>()
@@ -183,7 +183,7 @@ class SubsonicApiClient(context: Context) {
             "artistCount" to limit.coerceIn(1, 100).toString()
         )
 
-        return requestAndParse("search3", params).map { response ->
+        return requestAndParse("search3", params) { response ->
             parseArtistListCompat(response.optJSONObject("searchResult3")?.opt("artist"))
         }
     }
@@ -201,7 +201,7 @@ class SubsonicApiClient(context: Context) {
             "count" to limit.coerceIn(1, 100).toString()
         )
 
-        return requestAndParse("getSimilarSongs2", params).map { response ->
+        return requestAndParse("getSimilarSongs2", params) { response ->
             parseSongList(response.optJSONObject("similarSongs2")?.opt("song") ?: response.optJSONObject("similarSongs")?.opt("song"))
         }
     }
@@ -219,7 +219,7 @@ class SubsonicApiClient(context: Context) {
             "count" to limit.coerceIn(1, 100).toString()
         )
 
-        return requestAndParse("getArtistInfo2", params).map { response ->
+        return requestAndParse("getArtistInfo2", params) { response ->
             parseArtistId3List(response.optJSONObject("artistInfo2")?.optJSONArray("similarArtist"))
         }
     }
@@ -233,7 +233,7 @@ class SubsonicApiClient(context: Context) {
             "size" to limit.coerceIn(1, 500).toString()
         )
 
-        return requestAndParse("getRandomSongs", params).map { response ->
+        return requestAndParse("getRandomSongs", params) { response ->
             parseSongList(response.optJSONArray("randomSongs") ?: response.optJSONObject("randomSongs")?.opt("song"))
         }
     }
@@ -248,7 +248,7 @@ class SubsonicApiClient(context: Context) {
             "size" to limit.coerceIn(1, 500).toString()
         )
 
-        return requestAndParse("getAlbumList2", params).map { response ->
+        return requestAndParse("getAlbumList2", params) { response ->
             parseAlbumListCompat(response.optJSONObject("albumList2")?.opt("album") ?: response.optJSONObject("albumList")?.opt("album"))
         }
     }
@@ -330,7 +330,7 @@ class SubsonicApiClient(context: Context) {
             return Result.failure(IllegalStateException("Subsonic service is not connected"))
         }
 
-        return requestAndParse("getPlaylists", emptyMap()).map { response ->
+        return requestAndParse("getPlaylists", emptyMap()) { response ->
             val playlistsObj = response.optJSONObject("playlists")
             parsePlaylistList(playlistsObj?.opt("playlist") as? org.json.JSONArray ?: playlistsObj?.optJSONArray("playlist"), limit)
         }
@@ -357,7 +357,7 @@ class SubsonicApiClient(context: Context) {
             return Result.failure(IllegalArgumentException("Playlist id is required"))
         }
 
-        return requestAndParse("getPlaylist", mapOf("id" to playlistId)).map { response ->
+        return requestAndParse("getPlaylist", mapOf("id" to playlistId)) { response ->
             val entries = response.optJSONObject("playlist")?.opt("entry")
             parseSongList(entries).take(limit)
         }
@@ -371,7 +371,7 @@ class SubsonicApiClient(context: Context) {
             return Result.failure(IllegalArgumentException("Album id is required"))
         }
 
-        return requestAndParse("getAlbum", mapOf("id" to albumId)).map { response ->
+        return requestAndParse("getAlbum", mapOf("id" to albumId)) { response ->
             parseSongList(response.optJSONObject("album")?.opt("song")).take(limit)
         }
     }
@@ -384,7 +384,7 @@ class SubsonicApiClient(context: Context) {
             return Result.failure(IllegalArgumentException("Album id is required"))
         }
 
-        return requestAndParse("getAlbum", mapOf("id" to albumId)).map { response ->
+        return requestAndParse("getAlbum", mapOf("id" to albumId)) { response ->
             val albumJson = response.optJSONObject("album")
                 ?: throw IllegalStateException("Album not found for id=$albumId")
             parseAlbumItem(albumJson)
@@ -429,7 +429,7 @@ class SubsonicApiClient(context: Context) {
             "count" to limit.coerceIn(1, 100).toString()
         )
 
-        return requestAndParse("getArtistInfo2", params).map { response ->
+        return requestAndParse("getArtistInfo2", params) { response ->
             parseArtistId3List(response.optJSONObject("artistInfo2")?.optJSONArray("similarArtist"))
         }
     }
@@ -447,7 +447,7 @@ class SubsonicApiClient(context: Context) {
             "count" to limit.coerceIn(1, 100).toString()
         )
 
-        return requestAndParse("getSimilarSongs2", params).map { response ->
+        return requestAndParse("getSimilarSongs2", params) { response ->
             parseSongList(response.optJSONObject("similarSongs2")?.opt("song") ?: response.optJSONObject("similarSongs")?.opt("song"))
         }
     }
@@ -775,7 +775,9 @@ class SubsonicApiClient(context: Context) {
         endpoint: String, 
         params: Map<String, String> = emptyMap(),
         listParams: Map<String, List<String>> = emptyMap()
-    ): Result<JSONObject> {
+    ): Result<JSONObject> = withContext(Dispatchers.IO) {
+        // Parse on IO too: responses such as getArtists or getAlbum lists can be large, and
+        // callers are often ViewModel coroutines on the main thread.
         val result = request(endpoint, params, listParams).fold(
             onSuccess = { parseSubsonicResponse(it) },
             onFailure = { Result.failure(it) }
@@ -787,13 +789,27 @@ class SubsonicApiClient(context: Context) {
                 if (isConnected()) {
                     prefs.edit { putBoolean(KEY_USE_PASSWORD_AUTH, true) }
                 }
-                return request(endpoint, params, listParams).fold(
+                return@withContext request(endpoint, params, listParams).fold(
                     onSuccess = { parseSubsonicResponse(it) },
                     onFailure = { Result.failure(it) }
                 )
             }
         }
-        return result
+        result
+    }
+
+    /**
+     * [requestAndParse] followed by [transform], both on [Dispatchers.IO]. Mapping a response
+     * builds a signed cover-art URL (OkHttp URL parse) per song/album/artist, which blocked the
+     * main thread for seconds on large libraries when it ran in the caller's coroutine.
+     */
+    private suspend fun <T> requestAndParse(
+        endpoint: String,
+        params: Map<String, String> = emptyMap(),
+        listParams: Map<String, List<String>> = emptyMap(),
+        transform: (JSONObject) -> T
+    ): Result<T> = withContext(Dispatchers.IO) {
+        requestAndParse(endpoint, params, listParams).map(transform)
     }
 
     private fun parseSubsonicResponse(raw: String): Result<JSONObject> {

@@ -101,6 +101,7 @@ class SubsonicApiClient(context: Context) {
 
     fun logout() {
         credentials = null
+        stableCoverArtAuth = null
         usePasswordAuth = false
         prefs.edit { clear() }
     }

@@ -1659,15 +1659,24 @@ class StreamingMusicRepositoryImpl(
         }
         trimSongCache()
 
-        val mergedSongs = (songsFlow.value.filterIsInstance<StreamingSong>() + songs)
-            .distinctBy { it.id }
+        val currentSongs = songsFlow.value
+        // Merging a search result into a catalog of thousands of songs re-groups every album and
+        // artist; do that off the caller's (main) dispatcher, as replaceCatalog() does.
+        val deriveAlbums = providerAlbumCache.isEmpty()
+        val (mergedSongs, derivedAlbums, rawArtists) = withContext(Dispatchers.Default) {
+            val merged = (currentSongs.filterIsInstance<StreamingSong>() + songs).distinctBy { it.id }
+            Triple(
+                merged,
+                if (deriveAlbums) buildAlbumItems(serviceId, merged) else null,
+                buildArtistItems(serviceId, merged)
+            )
+        }
 
         songsFlow.value = mergedSongs
         // Only populate albumsFlow with derived albums if no provider albums are cached
-        if (providerAlbumCache.isEmpty()) {
-            albumsFlow.value = buildAlbumItems(serviceId, mergedSongs)
+        if (derivedAlbums != null && providerAlbumCache.isEmpty()) {
+            albumsFlow.value = derivedAlbums
         }
-        val rawArtists = buildArtistItems(serviceId, mergedSongs)
         artistsFlow.value = rawArtists
         playlistsFlow.value = emptyList()
 

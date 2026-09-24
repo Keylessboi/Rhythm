@@ -18,6 +18,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1571,47 +1572,72 @@ private fun EditSongSheet(
             isFetchingOnlineArt = true
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val apiService = NetworkClient.ytmusicApiService
-                    if (apiService != null) {
-                        val searchQuery = "${title.trim()} ${artist.trim()}"
-                        val searchRequest = YTMusicSearchRequest(
-                            context = YTMusicContext(YTMusicClient()),
-                            query = searchQuery,
-                            params = "EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D"
-                        )
-                        val response = apiService.search(request = searchRequest)
-                        if (response.isSuccessful) {
-                            val imageUrl = response.body()?.extractAlbumImageUrl()
-                            if (!imageUrl.isNullOrEmpty()) {
-                                val okRequest = okhttp3.Request.Builder().url(imageUrl).build()
-                                val okResponse = NetworkClient.genericHttpClient.newCall(okRequest).execute()
-                                if (okResponse.isSuccessful) {
-                                    val bytes = okResponse.body.bytes()
-                                    val tempFile = File(context.cacheDir, "temp_artwork_fetched_${song.id}.jpg")
-                                    tempFile.writeBytes(bytes)
-                                    withContext(Dispatchers.Main) {
-                                        selectedImageUri = Uri.fromFile(tempFile)
-                                        removeArtwork = false
-                                        Toast.makeText(context, R.string.songinfobottomsheet_artwork_fetched_successfully_click, Toast.LENGTH_SHORT).show()
-                                    }
+                    var imageUrl: String? = null
+
+                    if (NetworkClient.isDeezerApiEnabled()) {
+                        val deezerApi = NetworkClient.deezerApiService
+                        if (deezerApi != null) {
+                            try {
+                                val query = if (artist.isNotBlank() && !artist.equals("Unknown", ignoreCase = true)) {
+                                    "${title.trim()} ${artist.trim()}"
+                                } else title.trim()
+                                val response = deezerApi.searchAlbums(query)
+                                val albumList = response.data
+                                if (!albumList.isNullOrEmpty()) {
+                                    val best = albumList.firstOrNull { albumItem ->
+                                        (album.isNotBlank() && albumItem.title.contains(album, ignoreCase = true)) ||
+                                        albumItem.artist?.name?.contains(artist, ignoreCase = true) == true
+                                    } ?: albumList.firstOrNull()
+                                    imageUrl = best?.coverXl ?: best?.coverBig ?: best?.coverMedium ?: best?.cover
+                                }
+                            } catch (e: Exception) {
+                                Log.w("SongInfoBottomSheet", "Deezer album search failed: ${e.message}")
+                            }
+                        }
+                    }
+
+                    if (imageUrl.isNullOrEmpty() && NetworkClient.isYTMusicApiEnabled()) {
+                        val apiService = NetworkClient.ytmusicApiService
+                        if (apiService != null) {
+                            try {
+                                val searchQuery = "${title.trim()} ${artist.trim()}"
+                                val searchRequest = YTMusicSearchRequest(
+                                    context = YTMusicContext(YTMusicClient()),
+                                    query = searchQuery,
+                                    params = "EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D"
+                                )
+                                val response = apiService.search(request = searchRequest)
+                                if (response.isSuccessful) {
+                                    imageUrl = response.body()?.extractAlbumImageUrl()
                                 } else {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, R.string.songinfobottomsheet_failed_to_download_artwork_1, Toast.LENGTH_SHORT).show()
-                                    }
+                                    Log.w("SongInfoBottomSheet", "YTMusic search unsuccessful: ${response.code()}")
                                 }
-                            } else {
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, R.string.songinfobottomsheet_no_artwork_found_for, Toast.LENGTH_SHORT).show()
-                                }
+                            } catch (e: Exception) {
+                                Log.w("SongInfoBottomSheet", "YTMusic album search failed: ${e.message}")
+                            }
+                        }
+                    }
+
+                    if (!imageUrl.isNullOrEmpty()) {
+                        val okRequest = okhttp3.Request.Builder().url(imageUrl).build()
+                        val okResponse = NetworkClient.genericHttpClient.newCall(okRequest).execute()
+                        if (okResponse.isSuccessful) {
+                            val bytes = okResponse.body.bytes()
+                            val tempFile = File(context.cacheDir, "temp_artwork_fetched_${song.id}.jpg")
+                            tempFile.writeBytes(bytes)
+                            withContext(Dispatchers.Main) {
+                                selectedImageUri = Uri.fromFile(tempFile)
+                                removeArtwork = false
+                                Toast.makeText(context, R.string.songinfobottomsheet_artwork_fetched_successfully_click, Toast.LENGTH_SHORT).show()
                             }
                         } else {
                             withContext(Dispatchers.Main) {
-                                Toast.makeText(context, R.string.songinfobottomsheet_online_search_failed, Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, R.string.songinfobottomsheet_failed_to_download_artwork_1, Toast.LENGTH_SHORT).show()
                             }
                         }
                     } else {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(context, R.string.songinfobottomsheet_online_api_service_unavailable, Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, R.string.songinfobottomsheet_no_artwork_found_for, Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
@@ -1915,7 +1941,7 @@ private fun EditSongSheet(
                                     )
                                 }
 
-                                if (NetworkClient.isYTMusicApiEnabled()) {
+                                if (NetworkClient.isDeezerApiEnabled() || NetworkClient.isYTMusicApiEnabled()) {
                                     Spacer(modifier = Modifier.height(10.dp))
                                     RhythmDetailActionButtonFullWidth(
                                         onClick = fetchOnlineArtwork,
@@ -2431,7 +2457,7 @@ private fun EditSongSheet(
                         )
                     }
 
-                    if (NetworkClient.isYTMusicApiEnabled()) {
+                    if (NetworkClient.isDeezerApiEnabled() || NetworkClient.isYTMusicApiEnabled()) {
                         RhythmDetailActionButtonFullWidth(
                             onClick = fetchOnlineArtwork,
                             enabled = !isFetchingOnlineArt && title.isNotBlank() && artist.isNotBlank(),

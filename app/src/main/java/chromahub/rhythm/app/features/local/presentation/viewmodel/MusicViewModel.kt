@@ -2290,15 +2290,26 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val mergedSongs = freshSongs.map { fresh ->
                 val cached = cachedSongMap[fresh.id]
                 if (cached != null) {
-                    val keepEmbedded = repository.isEmbeddedArtworkCacheUri(cached.artworkUri) &&
-                        cached.artworkUri?.path?.let { File(it).exists() } == true
+                    val isCachedFileValid = cached.artworkUri?.scheme == "file" &&
+                        cached.artworkUri.path?.let { File(it).exists() } == true
+                    val hasArtworkOverride = runCatching {
+                        getApplication<Application>().getSharedPreferences("artwork_overrides", Context.MODE_PRIVATE)
+                            .getString("uri_${cached.id}", null) != null
+                    }.getOrDefault(false)
+                    val keepCachedArtwork = isCachedFileValid || hasArtworkOverride
+                    val resolvedArtworkUri = if (keepCachedArtwork) {
+                        cached.artworkUri
+                    } else {
+                        fresh.artworkUri ?: cached.artworkUri
+                    }
+
                     fresh.copy(
                         genre = fresh.genre ?: cached.genre,
                         bitrate = fresh.bitrate ?: cached.bitrate,
                         sampleRate = fresh.sampleRate ?: cached.sampleRate,
                         channels = fresh.channels ?: cached.channels,
                         codec = fresh.codec ?: cached.codec,
-                        artworkUri = if (keepEmbedded) cached.artworkUri else (fresh.artworkUri ?: cached.artworkUri)
+                        artworkUri = resolvedArtworkUri
                     )
                 } else {
                     fresh
@@ -2946,6 +2957,37 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             if (_currentSong.value?.id == updatedSong.id) {
                 _currentSong.value = updatedSong
             }
+
+            _currentQueue.value = _currentQueue.value.copy(
+                songs = _currentQueue.value.songs.map { song ->
+                    if (song.id == updatedSong.id) updatedSong else song
+                }
+            )
+
+            mediaController?.let { controller ->
+                try {
+                    val currentIndex = controller.currentMediaItemIndex
+                    if (currentIndex != C.INDEX_UNSET &&
+                        currentIndex in 0 until controller.mediaItemCount
+                    ) {
+                        val currentItem = controller.getMediaItemAt(currentIndex)
+                        if (currentItem.mediaId == updatedSong.id) {
+                            val updatedMetadata = currentItem.mediaMetadata.buildUpon()
+                                .setTitle(updatedSong.title)
+                                .setArtist(updatedSong.artist)
+                                .setAlbumTitle(updatedSong.album)
+                                .setArtworkUri(updatedSong.artworkUri)
+                                .build()
+                            val updatedItem = currentItem.buildUpon()
+                                .setMediaMetadata(updatedMetadata)
+                                .build()
+                            controller.replaceMediaItem(currentIndex, updatedItem)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to update media item metadata in mediaController", e)
+                }
+            }
             
             // Update in any playlists
             _playlists.value = _playlists.value.map { playlist ->
@@ -2965,6 +3007,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             
             Log.d(TAG, "Updated song metadata: ${updatedSong.title} by ${updatedSong.artist}")
         }
+    }
+
+    /**
+     * Saves artwork only to library (local persistent storage and Room / artwork_overrides)
+     * without modifying the audio file tags on disk.
+     */
+    fun saveArtworkToLibraryOnly(
+        song: Song,
+        artworkUri: Uri,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        metadataManagerHelper.saveArtworkToLibraryOnly(song, artworkUri, onSuccess, onError)
     }
 
     /**
@@ -9452,7 +9507,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Resolve songs via an id -> song map (O(n) even for large queues), including
                 // the current queue so streaming (Go-mode) songs keep their real duration/artwork.
-                val songsById = (_songs.value + _currentQueue.value.songs).associateBy { it.id }
+                val songsById = (_currentQueue.value.songs + _songs.value).associateBy { it.id }
                 val mediaItemSongs = mediaItems.mapNotNull { mediaItem ->
                     songsById[mediaItem.mediaId] ?: mediaItemToTransientSong(mediaItem)
                 }

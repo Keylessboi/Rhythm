@@ -3959,9 +3959,12 @@ fun MaterialPlayerScreen(
                     Button(
                         onClick = {
                             showAutoFetchEmbedDialog = false
+                            val uriStr = fetchedAutoArtworkUriStr
+                            val currentSong = dialogSong
                             pendingAutoFetchSong = null
-                            dialogSong?.let { currentSong ->
-                                val artUri = fetchedAutoArtworkUriStr?.let { it.toUri() }
+                            fetchedAutoArtworkUriStr = null
+                            if (currentSong != null) {
+                                val artUri = uriStr?.let { it.toUri() }
                                 musicViewModel.saveMetadataChanges(
                                     song = currentSong,
                                     title = currentSong.title,
@@ -4015,7 +4018,26 @@ fun MaterialPlayerScreen(
                     OutlinedButton(
                         onClick = {
                             showAutoFetchEmbedDialog = false
+                            val uriStr = fetchedAutoArtworkUriStr
+                            val currentSong = dialogSong
                             pendingAutoFetchSong = null
+                            fetchedAutoArtworkUriStr = null
+                            if (currentSong != null && uriStr != null) {
+                                musicViewModel.saveArtworkToLibraryOnly(
+                                    song = currentSong,
+                                    artworkUri = uriStr.toUri(),
+                                    onSuccess = {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.expressiveplayerscreen_artwork_applied_toast),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    onError = { err ->
+                                        Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()

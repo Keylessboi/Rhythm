@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import androidx.core.content.edit
+import chromahub.rhythm.app.network.NetworkClient
+import okhttp3.Request
 
 class LibraryMetadataManager(
     private val context: Application,
@@ -80,24 +82,47 @@ class LibraryMetadataManager(
             try {
                 val appContext = context.applicationContext
 
-                val tempArtworkUri = if (artworkUri != null && artworkUri.scheme == "content") {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            val tempFile = File(appContext.cacheDir, "temp_single_edit_art_${System.currentTimeMillis()}.jpg")
-                            appContext.contentResolver.openInputStream(artworkUri)?.use { input ->
-                                tempFile.outputStream().use { output ->
-                                    input.copyTo(output)
+                val tempArtworkUri = if (artworkUri != null) {
+                    if (artworkUri.scheme == "http" || artworkUri.scheme == "https") {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                val tempFile = File(appContext.cacheDir, "temp_single_edit_online_${System.currentTimeMillis()}.jpg")
+                                val request = Request.Builder().url(artworkUri.toString()).build()
+                                val response = NetworkClient.genericHttpClient.newCall(request).execute()
+                                if (response.isSuccessful) {
+                                    response.body.byteStream().use { input ->
+                                        tempFile.outputStream().use { output ->
+                                            input.copyTo(output)
+                                        }
+                                    }
+                                    Uri.fromFile(tempFile)
+                                } else {
+                                    artworkUri
                                 }
                             }
-                            Uri.fromFile(tempFile)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to download online artwork for single edit", e)
+                            artworkUri
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to pre-cache single edit artwork", e)
+                    } else if (artworkUri.scheme == "content") {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                val tempFile = File(appContext.cacheDir, "temp_single_edit_art_${System.currentTimeMillis()}.jpg")
+                                appContext.contentResolver.openInputStream(artworkUri)?.use { input ->
+                                    tempFile.outputStream().use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                Uri.fromFile(tempFile)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to pre-cache single edit artwork", e)
+                            artworkUri
+                        }
+                    } else {
                         artworkUri
                     }
-                } else {
-                    artworkUri
-                }
+                } else null
 
                 // Early format check — unsupported formats cannot be tag-edited
                 val fileExtension = run {
@@ -801,20 +826,67 @@ class LibraryMetadataManager(
         }
     }
 
-    private suspend fun saveArtworkToCache(context: Context, song: Song, artworkUri: Uri): Uri? {
+    private suspend fun saveArtworkToCache(context: Context, song: Song, artworkUri: Uri): Uri? = withContext(Dispatchers.IO) {
         try {
-            context.contentResolver.openInputStream(artworkUri)?.use { inputStream ->
-                val artworkFile = File(context.cacheDir, "artwork_${song.id}.jpg")
-                artworkFile.outputStream().use { output ->
-                    inputStream.copyTo(output)
-                }
-                Log.d(TAG, "Artwork saved to cache: ${artworkFile.absolutePath}")
-                return artworkFile.toUri()
+            val artworkDir = File(context.filesDir, "custom_artwork").apply {
+                if (!exists()) mkdirs()
             }
-            return null
+            val artworkFile = File(artworkDir, "artwork_${song.id}.jpg")
+
+            val inputStream = if (artworkUri.scheme == "http" || artworkUri.scheme == "https") {
+                val request = Request.Builder().url(artworkUri.toString()).build()
+                val response = NetworkClient.genericHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) return@withContext null
+                response.body.byteStream()
+            } else {
+                context.contentResolver.openInputStream(artworkUri)
+            }
+
+            inputStream?.use { input ->
+                artworkFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+                Log.d(TAG, "Artwork saved to persistent storage: ${artworkFile.absolutePath}")
+                artworkFile.toUri()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save artwork to cache", e)
-            throw e
+            null
+        }
+    }
+
+    /**
+     * Saves artwork only to library (local app storage and Room / artwork_overrides) without embedding into the audio file.
+     */
+    fun saveArtworkToLibraryOnly(
+        song: Song,
+        artworkUri: Uri,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        scope.launch {
+            try {
+                val appContext = context.applicationContext
+                val cachedUri = saveArtworkToCache(appContext, song, artworkUri)
+                if (cachedUri != null) {
+                    persistArtworkOverrideUri(appContext, song.id, cachedUri)
+                    MediaUtils.deleteCachedEmbeddedArtwork(appContext.cacheDir, song.uri)
+                    val updatedSong = song.copy(artworkUri = cachedUri)
+                    updateCurrentSongMetadata(updatedSong)
+                    withContext(Dispatchers.Main) {
+                        onSuccess()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onError("Failed to download or cache artwork")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving artwork to library only", e)
+                withContext(Dispatchers.Main) {
+                    onError(e.message ?: "Failed to save artwork to library")
+                }
+            }
         }
     }
 
@@ -848,6 +920,10 @@ class LibraryMetadataManager(
             val cachedArtwork = File(context.cacheDir, "artwork_${songId}.jpg")
             if (cachedArtwork.exists()) {
                 cachedArtwork.delete()
+            }
+            val persistentArtwork = File(File(context.filesDir, "custom_artwork"), "artwork_${songId}.jpg")
+            if (persistentArtwork.exists()) {
+                persistentArtwork.delete()
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to clear cached artwork for song $songId", e)

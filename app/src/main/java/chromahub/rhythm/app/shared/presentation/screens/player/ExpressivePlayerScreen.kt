@@ -2555,6 +2555,7 @@ private fun RhythmPlayerLyricsPanel(
                     val filteredText = remember(lyricsText, showTranslation, showRomanization) { filterPlainLyricsByPreference(lyricsText, showTranslation, showRomanization) }
                     val likelySynced = remember(lyricsText) { Regex("\\[\\d{1,3}:\\d{2}(?:[.:]\\d{0,3})?]").containsMatchIn(lyricsText) }
                     val parsedLyrics by produceState<List<chromahub.rhythm.app.util.LyricLine>?>(if (likelySynced) null else emptyList(), lyricsText, likelySynced) {
+                        value = if (likelySynced) null else emptyList()
                         value = if (!likelySynced) emptyList() else withContext(Dispatchers.Default) { chromahub.rhythm.app.util.LyricsParser.parseLyrics(lyricsText) }
                     }
                     if (parsedLyrics == null) {

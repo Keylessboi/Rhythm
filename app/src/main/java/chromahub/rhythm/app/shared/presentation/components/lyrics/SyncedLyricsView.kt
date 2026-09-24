@@ -166,6 +166,7 @@ fun SyncedLyricsView(
         key1 = lyrics,
         key2 = parsedLyricsInput
     ) {
+        value = parsedLyricsInput ?: emptyList()
         value = if (parsedLyricsInput != null) {
             parsedLyricsInput
         } else {

@@ -44,6 +44,7 @@ import chromahub.rhythm.app.shared.data.model.Song
 import chromahub.rhythm.app.infrastructure.service.player.RhythmPlayerEngine
 import chromahub.rhythm.app.infrastructure.service.player.TransitionController
 import chromahub.rhythm.app.infrastructure.service.player.PreloadController
+import chromahub.rhythm.app.infrastructure.service.util.RhythmBitmapLoader
 import chromahub.rhythm.app.infrastructure.widget.WidgetUpdater
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -1395,11 +1396,14 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val rhythmBitmapLoader = RhythmBitmapLoader(this)
+
         return MediaLibrarySession.Builder(
             this,
             player,
             MediaSessionCallback()
         ).setSessionActivity(pendingIntent)
+            .setBitmapLoader(rhythmBitmapLoader)
             .build()
     }
     

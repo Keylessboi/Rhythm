@@ -1620,7 +1620,9 @@ class StreamingMusicRepositoryImpl(
         }
 
         songsFlow.value = songs
-        if (derivedAlbums != null) {
+        // Re-check after the suspension: provider albums may have been cached meanwhile, and
+        // derived albums must not overwrite them.
+        if (derivedAlbums != null && providerAlbumCache.isEmpty()) {
             albumsFlow.value = derivedAlbums
         }
         if (artistsFlow.value.isEmpty() || rawArtists.size >= artistsFlow.value.size) {

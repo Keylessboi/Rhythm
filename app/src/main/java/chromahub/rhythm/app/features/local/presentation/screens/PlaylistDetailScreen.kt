@@ -1250,6 +1250,12 @@ fun PlaylistDetailScreen(
                         animationSpec = tween(durationMillis = 200)
                     )
                 ) {
+                val isPlaylistActive = remember(currentSong, playlist.songs) {
+                    currentSong != null && playlist.songs.any { it.id == currentSong.id }
+                }
+                val isPlaylistPlaying = isPlaylistActive && isPlaying
+                val isShuffleActive by musicViewModel.isShuffleEnabled.collectAsState()
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1261,12 +1267,16 @@ fun PlaylistDetailScreen(
                     RhythmDetailActionButton(
                         onClick = {
                             HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
-                            onPlayAll()
+                            if (isPlaylistActive) {
+                                onPlayPause()
+                            } else {
+                                onPlayAll()
+                            }
                         },
                         isFirst = true,
                         isLast = false,
-                        icon = RhythmIcons.Play,
-                        text = stringResource(R.string.action_play_all),
+                        icon = if (isPlaylistPlaying) RhythmIcons.Pause else RhythmIcons.Play,
+                        text = if (isPlaylistPlaying) stringResource(R.string.action_pause) else if (isPlaylistActive) stringResource(R.string.action_resume) else stringResource(R.string.action_play_all),
                         fontWeight = FontWeight.Bold
                     )
                     
@@ -1275,7 +1285,7 @@ fun PlaylistDetailScreen(
                             HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
                             onShufflePlay()
                         },
-                        type = RhythmButtonType.Tonal,
+                        type = if (isPlaylistActive && isShuffleActive) RhythmButtonType.Filled else RhythmButtonType.Tonal,
                         isFirst = false,
                         isLast = true,
                         icon = RhythmIcons.Shuffle,
@@ -1400,14 +1410,24 @@ fun PlaylistDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             if (playlist.songs.isNotEmpty()) {
+                                val isPlaylistActive = remember(currentSong, playlist.songs) {
+                                    currentSong != null && playlist.songs.any { it.id == currentSong.id }
+                                }
+                                val isPlaylistPlaying = isPlaylistActive && isPlaying
+                                val isShuffleActive by musicViewModel.isShuffleEnabled.collectAsState()
+
                                 // Play All button
                                 RhythmDetailActionButtonFullWidth(
                                     onClick = {
                                         HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
-                                        onPlayAll()
+                                        if (isPlaylistActive) {
+                                            onPlayPause()
+                                        } else {
+                                            onPlayAll()
+                                        }
                                     },
-                                    icon = RhythmIcons.Play,
-                                    text = stringResource(R.string.action_play_all),
+                                    icon = if (isPlaylistPlaying) RhythmIcons.Pause else RhythmIcons.Play,
+                                    text = if (isPlaylistPlaying) stringResource(R.string.action_pause) else if (isPlaylistActive) stringResource(R.string.action_resume) else stringResource(R.string.action_play_all),
                                     fontWeight = FontWeight.Normal
                                 )
 
@@ -1417,7 +1437,7 @@ fun PlaylistDetailScreen(
                                         HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
                                         onShufflePlay()
                                     },
-                                    type = RhythmButtonType.Tonal,
+                                    type = if (isPlaylistActive && isShuffleActive) RhythmButtonType.Filled else RhythmButtonType.Tonal,
                                     icon = RhythmIcons.Shuffle,
                                     iconSize = 24.dp,
                                     text = stringResource(R.string.action_shuffle),
@@ -2751,19 +2771,24 @@ fun PlaylistSongItem(
     
     // Animated colors for current song
     val titleColor by animateColorAsState(
-        targetValue = if (isCurrentSong) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        targetValue = if (isCurrentSong && !isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
         animationSpec = tween(300),
         label = "titleColor"
     )
     val artistColor by animateColorAsState(
-        targetValue = if (isCurrentSong) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        targetValue = if (isCurrentSong && !isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
         animationSpec = tween(300),
         label = "artistColor"
     )
-    val containerColor by animateColorAsState(
-        targetValue = if (isCurrentSong) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
+    val albumColor by animateColorAsState(
+        targetValue = if (isCurrentSong && !isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         animationSpec = tween(300),
-        label = "containerColor"
+        label = "albumColor"
+    )
+    val durationColor by animateColorAsState(
+        targetValue = if (isCurrentSong && !isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        animationSpec = tween(300),
+        label = "durationColor"
     )
     
     // Remove confirmation dialog (only show if onRemove is provided)
@@ -2820,9 +2845,11 @@ fun PlaylistSongItem(
     
     // Update container color for selection
     val selectionContainerColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f) 
-                      else if (isCurrentSong) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f) 
-                      else MaterialTheme.colorScheme.surface,
+        targetValue = when {
+            isSelected -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+            isCurrentSong -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.surface
+        },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -2902,7 +2929,7 @@ fun PlaylistSongItem(
                         fallbackShape = RoundedCornerShape(12.dp)
                     ),
                     tonalElevation = 4.dp,
-                    border = if (isCurrentSong) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary) else null
+                    border = if (isCurrentSong && !isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.onPrimary) else if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary) else null
                 ) {
                     M3ImageUtils.TrackImage(
                         imageUrl = song.artworkUri,
@@ -2918,7 +2945,7 @@ fun PlaylistSongItem(
                             .size(20.dp)
                             .offset(x = 4.dp, y = 4.dp),
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         shadowElevation = 0.dp
                     ) {
                         Box(
@@ -2927,7 +2954,7 @@ fun PlaylistSongItem(
                         ) {
                             PlayingEqIcon(
                                 modifier = Modifier.size(width = 12.dp, height = 10.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 isPlaying = isPlaying,
                                 bars = 3
                             )
@@ -2965,7 +2992,7 @@ fun PlaylistSongItem(
                     Text(
                         text = song.album,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = albumColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2977,7 +3004,7 @@ fun PlaylistSongItem(
                 Text(
                     text = formatDuration(song.duration, useHoursFormat),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = durationColor,
                     modifier = Modifier.padding(end = 4.dp)
                 )
             }
@@ -3041,11 +3068,11 @@ fun PlaylistSongItem(
                     shape = RoundedCornerShape(50),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = if (isCurrentSong && !isSelected)
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.onPrimary
                         else
                             MaterialTheme.colorScheme.primaryContainer,
                         contentColor = if (isCurrentSong && !isSelected)
-                            MaterialTheme.colorScheme.onPrimary
+                            MaterialTheme.colorScheme.primary
                         else
                             MaterialTheme.colorScheme.onPrimaryContainer
                     )

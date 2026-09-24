@@ -209,6 +209,7 @@ import chromahub.rhythm.app.shared.data.model.ArtistViewType
 import chromahub.rhythm.app.shared.data.model.PlaylistViewType
 import chromahub.rhythm.app.shared.data.model.AppSettings
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.AddToPlaylistBottomSheet
+import chromahub.rhythm.app.shared.presentation.components.bottomsheets.SongOverflowBottomSheet
 import chromahub.rhythm.app.shared.presentation.components.dialogs.CreatePlaylistDialog
 import chromahub.rhythm.app.shared.presentation.components.player.MiniPlayer
 import chromahub.rhythm.app.shared.presentation.components.common.M3PlaceholderType
@@ -1818,8 +1819,8 @@ fun LibraryScreen(
                                             musicViewModel.toggleFavorite(song)
                                         },
                                         favoriteSongs = favoriteSongs,
-                                        onGoToArtist = onArtistClick,
-                                        onGoToAlbum = onAlbumClick,
+                                        onGoToArtist = onNavigateToArtist,
+                                        onGoToAlbum = onAlbumBottomSheetClick,
                                         onShowSongInfo = { song ->
                                             selectedSong = song
                                             showSongInfoSheet = true
@@ -1872,8 +1873,8 @@ fun LibraryScreen(
                                             musicViewModel.toggleFavorite(song)
                                         },
                                         favoriteSongs = favoriteSongs,
-                                        onGoToArtist = onArtistClick,
-                                        onGoToAlbum = onAlbumClick,
+                                        onGoToArtist = onNavigateToArtist,
+                                        onGoToAlbum = onAlbumBottomSheetClick,
                                         onShowSongInfo = { song ->
                                             selectedSong = song
                                             showSongInfoSheet = true
@@ -1980,8 +1981,8 @@ fun LibraryScreen(
                                     onPlayNext = { song -> musicViewModel.playNext(song) },
                                     onToggleFavorite = { song -> musicViewModel.toggleFavorite(song) },
                                     favoriteSongs = musicViewModel.favoriteSongs.collectAsState().value,
-                                    onGoToArtist = onArtistClick,
-                                    onGoToAlbum = onAlbumClick,
+                                    onGoToArtist = onNavigateToArtist,
+                                    onGoToAlbum = onAlbumBottomSheetClick,
                                     onShowSongInfo = { song ->
                                         selectedSong = song
                                         showSongInfoSheet = true
@@ -2449,6 +2450,7 @@ fun SingleCardSongsContent(
     val groupByAlbumArtist by appSettings.groupByAlbumArtist.collectAsState()
     
     val selectedSongs = multiSelectionState?.selectedSongs?.collectAsState()?.value ?: emptyList()
+    var songForOverflow by remember { mutableStateOf<Song?>(null) }
     
     val isLoading = false
     val preparedSongs = remember(songs) {
@@ -2662,7 +2664,8 @@ fun SingleCardSongsContent(
                             },
                             isDownloaded = isStreamingMode && streamingDownloadedSongIds.contains(song.id),
                             isDownloading = isStreamingMode && streamingDownloadingSongIds.contains(song.id),
-                            onToggleDownload = if (isStreamingMode) ({ onStreamingToggleDownload?.invoke(song) }) else null
+                            onToggleDownload = if (isStreamingMode) ({ onStreamingToggleDownload?.invoke(song) }) else null,
+                            onOverflowClick = { songForOverflow = song }
                         )
                     }
                 }
@@ -2686,6 +2689,70 @@ fun SingleCardSongsContent(
                 dragLabelProvider = songFastScrollLabelProvider
             )
         }
+    }
+
+    if (songForOverflow != null) {
+        val targetSong = songForOverflow!!
+        SongOverflowBottomSheet(
+            song = targetSong,
+            onDismiss = { songForOverflow = null },
+            onPlay = {
+                val songIndex = preparedSongs.indexOfFirst { it.id == targetSong.id }
+                if (songIndex >= 0) {
+                    onPlayQueueFromIndex(preparedSongs, songIndex)
+                } else {
+                    onSongClick(targetSong)
+                }
+            },
+            onPlayNext = { onPlayNext(targetSong) },
+            onAddToQueue = { onAddToQueue(targetSong) },
+            isFavorite = favoriteSongs.contains(targetSong.id),
+            onToggleFavorite = onToggleFavorite?.let { fn -> { fn(targetSong) } },
+            onAddToPlaylist = { onAddToPlaylist(targetSong) },
+            onGoToAlbum = {
+                val album = albums.findAlbumForSong(targetSong)
+                    ?: targetSong.album.trim().takeIf { it.isNotBlank() }?.let { albumTitle ->
+                        Album(
+                            id = targetSong.albumId.ifBlank { "unknown_$albumTitle" },
+                            title = albumTitle,
+                            artist = targetSong.albumArtist?.takeIf { it.isNotBlank() } ?: targetSong.artist,
+                            artworkUri = targetSong.artworkUri
+                        )
+                    }
+                album?.let { onGoToAlbum(it) }
+            },
+            onGoToArtist = {
+                val artist = if (groupByAlbumArtist) {
+                    val explicitAlbumArtist = targetSong.albumArtist?.trim().orEmpty()
+                    val songArtistNames = if (explicitAlbumArtist.isNotBlank() && !explicitAlbumArtist.equals("<unknown>", ignoreCase = true)) {
+                        splitArtistNames(explicitAlbumArtist)
+                    } else {
+                        splitArtistNames(targetSong.artist)
+                    }
+                    songArtistNames.firstNotNullOfOrNull { name ->
+                        artists.find { it.name.equals(name, ignoreCase = true) }
+                    } ?: songArtistNames.firstOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
+                        Artist(id = name, name = name)
+                    }
+                } else {
+                    val songArtistNames = splitArtistNames(targetSong.artist)
+                    songArtistNames.firstNotNullOfOrNull { name ->
+                        artists.find { it.name.equals(name, ignoreCase = true) }
+                    } ?: songArtistNames.firstOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
+                        Artist(id = name, name = name)
+                    }
+                }
+                val resolvedArtist = artist ?: targetSong.artist.trim().takeIf { it.isNotBlank() }?.let { Artist(id = it, name = it) }
+                resolvedArtist?.let { onGoToArtist(it) }
+            },
+            onShowSongInfo = { onShowSongInfo(targetSong) },
+            onAddToBlacklist = onAddToBlacklist?.let { fn -> { fn(targetSong) } },
+            onDeleteSong = onDeleteSong?.let { fn -> { fn(targetSong) } },
+            isDownloaded = isStreamingMode && streamingDownloadedSongIds.contains(targetSong.id),
+            isDownloading = isStreamingMode && streamingDownloadingSongIds.contains(targetSong.id),
+            onToggleDownload = if (isStreamingMode) ({ onStreamingToggleDownload?.invoke(targetSong) }) else null,
+            isStreaming = isStreamingMode
+        )
     }
 }
 
@@ -3324,7 +3391,8 @@ fun LibrarySongItem(
     customMenuContent: (@Composable (dismissMenu: () -> Unit) -> Unit)? = null,
     isDownloaded: Boolean = false,
     isDownloading: Boolean = false,
-    onToggleDownload: (() -> Unit)? = null
+    onToggleDownload: (() -> Unit)? = null,
+    onOverflowClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var showDropdown by remember { mutableStateOf(false) }
@@ -3522,7 +3590,11 @@ fun LibrarySongItem(
                 FilledIconButton(
                     onClick = {
                         HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
-                        showDropdown = true
+                        if (onOverflowClick != null) {
+                            onOverflowClick()
+                        } else {
+                            showDropdown = true
+                        }
                     },
                     modifier = Modifier
                         .width(32.dp)
@@ -3540,6 +3612,7 @@ fun LibrarySongItem(
                     )
                 }
 
+                if (onOverflowClick == null) {
                 DropdownMenu(
                     expanded = showDropdown,
                     onDismissRequest = {
@@ -3614,6 +3687,7 @@ fun LibrarySongItem(
                         )
                     }
                 }
+                }
             }
         }
     }
@@ -3646,7 +3720,8 @@ fun LibrarySongItemWrapper(
     customMenuContent: (@Composable (dismissMenu: () -> Unit) -> Unit)? = null,
     isDownloaded: Boolean = false,
     isDownloading: Boolean = false,
-    onToggleDownload: (() -> Unit)? = null
+    onToggleDownload: (() -> Unit)? = null,
+    onOverflowClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val isCurrentSong = currentSong?.id == song.id
@@ -3753,7 +3828,8 @@ fun LibrarySongItemWrapper(
                 customMenuContent = customMenuContent,
                 isDownloaded = isDownloaded,
                 isDownloading = isDownloading,
-                onToggleDownload = onToggleDownload
+                onToggleDownload = onToggleDownload,
+                onOverflowClick = onOverflowClick
             )
 
             if (isDownloading) {
@@ -6672,6 +6748,7 @@ fun YearGroupedSongsContent(
     onStreamingToggleDownload: ((Song) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    var songForOverflow by remember { mutableStateOf<Song?>(null) }
 
     val songsByYear = remember(songs, sortOrder) {
         val groups = songs.groupBy { song ->
@@ -6791,7 +6868,8 @@ fun YearGroupedSongsContent(
                             onLongPress = { onSongLongPress(song) },
                             isDownloaded = isStreamingMode && streamingDownloadedSongIds.contains(song.id),
                             isDownloading = isStreamingMode && streamingDownloadingSongIds.contains(song.id),
-                            onToggleDownload = if (isStreamingMode) ({ onStreamingToggleDownload?.invoke(song) }) else null
+                            onToggleDownload = if (isStreamingMode) ({ onStreamingToggleDownload?.invoke(song) }) else null,
+                            onOverflowClick = { songForOverflow = song }
                         )
                     }
                 }
@@ -6809,6 +6887,42 @@ fun YearGroupedSongsContent(
             listState = listState,
             visible = canScroll,
             dragLabelProvider = dateFastScrollLabelProvider
+        )
+    }
+
+    if (songForOverflow != null) {
+        val targetSong = songForOverflow!!
+        SongOverflowBottomSheet(
+            song = targetSong,
+            onDismiss = { songForOverflow = null },
+            onPlay = { onSongClick(targetSong) },
+            onPlayNext = { onPlayNext(targetSong) },
+            onAddToQueue = { onAddToQueue(targetSong) },
+            isFavorite = favoriteSongs.contains(targetSong.id),
+            onToggleFavorite = { onToggleFavorite(targetSong) },
+            onAddToPlaylist = { onAddToPlaylist(targetSong) },
+            onGoToAlbum = {
+                val album = albums.findAlbumForSong(targetSong)
+                    ?: targetSong.album.trim().takeIf { it.isNotBlank() }?.let { albumTitle ->
+                        Album(
+                            id = targetSong.albumId.ifBlank { "unknown_$albumTitle" },
+                            title = albumTitle,
+                            artist = targetSong.albumArtist?.takeIf { it.isNotBlank() } ?: targetSong.artist,
+                            artworkUri = targetSong.artworkUri
+                        )
+                    }
+                album?.let { onGoToAlbum(it) }
+            },
+            onGoToArtist = {
+                onGoToArtist(Artist(id = targetSong.artist.trim(), name = targetSong.artist.trim()))
+            },
+            onShowSongInfo = { onShowSongInfo(targetSong) },
+            onAddToBlacklist = { onAddToBlacklist(targetSong) },
+            onDeleteSong = { onDeleteSong(targetSong) },
+            isDownloaded = isStreamingMode && streamingDownloadedSongIds.contains(targetSong.id),
+            isDownloading = isStreamingMode && streamingDownloadingSongIds.contains(targetSong.id),
+            onToggleDownload = if (isStreamingMode) ({ onStreamingToggleDownload?.invoke(targetSong) }) else null,
+            isStreaming = isStreamingMode
         )
     }
 }

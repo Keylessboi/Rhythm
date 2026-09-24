@@ -849,6 +849,8 @@
     <string name="action_browse_files">Browse Files</string>
     <string name="action_choose">Choose</string>
     <string name="action_play">Play</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
     <string name="action_shuffle">Shuffle</string>
     <string name="action_share">Share</string>
 <string name="settings_title">Settings</string>

@@ -6615,7 +6615,7 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
         }
     }
     
-    private val _expressiveShapePlayerControls = MutableStateFlow(prefs.getString(KEY_EXPRESSIVE_SHAPE_PLAYER_CONTROLS, "COOKIE_12") ?: "COOKIE_12")
+    private val _expressiveShapePlayerControls = MutableStateFlow(prefs.getString(KEY_EXPRESSIVE_SHAPE_PLAYER_CONTROLS, "SUNNY") ?: "SUNNY")
     val expressiveShapePlayerControls: StateFlow<String> = _expressiveShapePlayerControls.asStateFlow()
     fun setExpressiveShapePlayerControls(value: String) {
         _expressiveShapePlayerControls.value = value
@@ -6646,7 +6646,7 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
                 _expressiveShapeSongArt.value = "CLOVER_8_LEAF"
                 _expressiveShapePlaylistArt.value = "CLOVER_4_LEAF"
                 _expressiveShapeArtistArt.value = "PIXEL_CIRCLE"
-                _expressiveShapePlayerControls.value = "COOKIE_12"
+                _expressiveShapePlayerControls.value = "SUNNY"
                 _expressiveShapeMiniPlayer.value = "COOKIE_4"
             }
             "FRIENDLY" -> {

@@ -320,7 +320,7 @@ fun ExpressiveShapesSettingsScreen(onBackClick: () -> Unit) {
         val sanitizedArtistArt = sanitizeShapeId(shapeArtistArt, "PIXEL_CIRCLE")
         if (sanitizedArtistArt != shapeArtistArt) appSettings.setExpressiveShapeArtistArt(sanitizedArtistArt)
 
-        val sanitizedPlayerControls = sanitizeShapeId(shapePlayerControls, "COOKIE_12")
+        val sanitizedPlayerControls = sanitizeShapeId(shapePlayerControls, "SUNNY")
         if (sanitizedPlayerControls != shapePlayerControls) appSettings.setExpressiveShapePlayerControls(sanitizedPlayerControls)
 
         val sanitizedMiniPlayer = sanitizeShapeId(shapeMiniPlayer, "COOKIE_4")

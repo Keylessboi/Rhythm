@@ -268,6 +268,12 @@ fun ArtistDetailScreen(
         }
     }
 
+    val isArtistActive = remember(currentSong, artistSongs) {
+        currentSong != null && artistSongs.any { it.id == currentSong.id }
+    }
+    val isArtistPlaying = isArtistActive && isPlaying
+    val isShuffleActive by viewModel.isShuffleEnabled.collectAsState()
+
     // Artist description from Wikipedia if enabled
     var artistDescription by remember(artistName) { mutableStateOf<String?>(null) }
     var isDescriptionLoading by remember(artistName) { mutableStateOf(false) }
@@ -554,6 +560,10 @@ fun ArtistDetailScreen(
                                             }
                                         },
                                         haptics = haptics,
+                                        isArtistActive = isArtistActive,
+                                        isArtistPlaying = isArtistPlaying,
+                                        isShuffleActive = isShuffleActive,
+                                        onPlayPause = { viewModel.togglePlayPause() },
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(horizontal = 8.dp)
@@ -1005,7 +1015,11 @@ fun ArtistDetailScreen(
                                                 onAddToQueueAll(artistSongs)
                                             }
                                         },
-                                        haptics = haptics
+                                        haptics = haptics,
+                                        isArtistActive = isArtistActive,
+                                        isArtistPlaying = isArtistPlaying,
+                                        isShuffleActive = isShuffleActive,
+                                        onPlayPause = { viewModel.togglePlayPause() }
                                     )
                                 }
                             }
@@ -1175,7 +1189,11 @@ private fun ArtistActionButtons(
     haptics: androidx.compose.ui.hapticfeedback.HapticFeedback,
     modifier: Modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 24.dp, vertical = 8.dp)
+        .padding(horizontal = 24.dp, vertical = 8.dp),
+    isArtistActive: Boolean = false,
+    isArtistPlaying: Boolean = false,
+    isShuffleActive: Boolean = false,
+    onPlayPause: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var addToQueuePressed by remember { mutableStateOf(false) }
@@ -1208,13 +1226,17 @@ private fun ArtistActionButtons(
             RhythmDetailActionButton(
                 onClick = {
                     HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
-                    onPlayAll()
+                    if (isArtistActive) {
+                        onPlayPause()
+                    } else {
+                        onPlayAll()
+                    }
                 },
                 isFirst = true,
                 isLast = false,
                 enabled = artistSongs.isNotEmpty(),
-                icon = RhythmIcons.Play,
-                text = stringResource(R.string.action_play_all),
+                icon = if (isArtistPlaying) RhythmIcons.Pause else RhythmIcons.Play,
+                text = if (isArtistPlaying) stringResource(R.string.action_pause) else if (isArtistActive) stringResource(R.string.action_resume) else stringResource(R.string.action_play_all),
                 fontWeight = FontWeight.Bold,
                 contentPadding = PaddingValues(horizontal = 24.dp)
             )
@@ -1225,7 +1247,7 @@ private fun ArtistActionButtons(
                     HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
                     onShufflePlay()
                 },
-                type = RhythmButtonType.Tonal,
+                type = if (isArtistActive && isShuffleActive) RhythmButtonType.Filled else RhythmButtonType.Tonal,
                 isFirst = false,
                 isLast = true,
                 enabled = artistSongs.isNotEmpty(),
@@ -1525,7 +1547,7 @@ private fun ArtistSongItem(
     
     val containerColor by animateColorAsState(
         targetValue = when {
-            isCurrentSong -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f)
+            isCurrentSong -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.surfaceContainer
         },
         animationSpec = tween(300),
@@ -1562,7 +1584,7 @@ private fun ArtistSongItem(
                         ExpressiveShapeTarget.SONG_ART,
                         fallbackShape = MaterialTheme.shapes.large
                     ),
-                    border = if (isCurrentSong) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+                    border = if (isCurrentSong) BorderStroke(2.dp, MaterialTheme.colorScheme.onPrimary) else null
                 ) {
                     M3ImageUtils.TrackImage(
                         imageUrl = song.artworkUri,
@@ -1578,13 +1600,13 @@ private fun ArtistSongItem(
                             .size(18.dp)
                             .offset(x = 4.dp, y = 4.dp),
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         shadowElevation = 0.dp
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             PlayingEqIcon(
                                 modifier = Modifier.size(width = 10.dp, height = 8.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 isPlaying = isPlaying,
                                 bars = 3
                             )
@@ -1604,7 +1626,7 @@ private fun ArtistSongItem(
                     fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = if (isCurrentSong) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    color = if (isCurrentSong) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
@@ -1615,7 +1637,7 @@ private fun ArtistSongItem(
                     Text(
                         text = song.album,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isCurrentSong) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        color = if (isCurrentSong) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1625,6 +1647,7 @@ private fun ArtistSongItem(
                         song = song,
                         iconSize = 16.dp,
                         padding = 0.dp,
+                        tint = if (isCurrentSong) MaterialTheme.colorScheme.onPrimary else null,
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 }
@@ -1634,7 +1657,7 @@ private fun ArtistSongItem(
                 Text(
                     text = formatDuration(song.duration, useHoursFormat),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = if (isCurrentSong) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     modifier = Modifier.padding(end = 4.dp)
                 )
             }
@@ -1652,11 +1675,11 @@ private fun ArtistSongItem(
                         shape = RoundedCornerShape(50),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = if (isCurrentSong)
-                                MaterialTheme.colorScheme.primary
+                                MaterialTheme.colorScheme.onPrimary
                             else
                                 MaterialTheme.colorScheme.primaryContainer,
                             contentColor = if (isCurrentSong)
-                                MaterialTheme.colorScheme.onPrimary
+                                MaterialTheme.colorScheme.primary
                             else
                                 MaterialTheme.colorScheme.onPrimaryContainer
                         )

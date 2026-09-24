@@ -3372,6 +3372,8 @@ private fun LocalNavigationContent(
                                 navController.navigate(StreamingRoutes.artist(artist.id, artist.name)) {
                                     launchSingleTop = true
                                 }
+                            } else {
+                                navController.navigate(Screen.ArtistDetail.createRoute(artist.name))
                             }
                         },
                         onAlbumShufflePlay = { album ->

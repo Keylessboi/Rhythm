@@ -2,14 +2,14 @@
 <resources>
     <string name="app_name">Rhythm</string>
     <!-- Common Labels -->
-    <string name="home">家</string>
-    <string name="library">図書館</string>
+    <string name="home">ホーム</string>
+    <string name="library">ライブラリー</string>
     <string name="search">検索</string>
     <!-- Media3 notification configuration -->
     <string name="media3_notification_channel_name">Rhythm 再生中</string>
     <string name="media3_notification_channel_description">メディア再生コントロール</string>
     <!-- Widget strings -->
-    <string name="widget_description_glance">Rhythm 音楽プレイヤー、Material 3 デザインやリアルタイムの状態更新による再生の制御</string>
+    <string name="widget_description_glance">Rhythm 音楽プレーヤー、Material 3 デザインやリアルタイムの状態更新による再生の制御</string>
     <string name="widget_name_glance">Rhythm 音楽</string>
     <string name="unknown_artist">不明なアーティスト</string>
     <string name="play_pause">再生/一時停止</string>
@@ -21,7 +21,7 @@
     <string name="widget_appearance">外観</string>
     <string name="widget_tip_controls">ウィジェットをタップしてアプリを開き、ボタンで再生を制御します</string>
     <!-- Content Descriptions -->
-    <string name="cd_navigate">ナビゲート</string>
+    <string name="cd_navigate">案内</string>
     <!-- Settings - Notifications -->
     <string name="settings_notifications">お知らせ</string>
     <string name="settings_notifications_updates_group">アプリのアップデート</string>
@@ -30,7 +30,7 @@
     <string name="settings_update_notifications_merged_desc">新しいバージョンとバックグラウンド更新チェック結果の通知を受け取る</string>
     <string name="settings_rhythm_guard_alert_notifications">安全上の注意通知</string>
     <string name="settings_rhythm_guard_alert_notifications_desc">Rhythm Guard が危険な音量または音響暴露を検出したときに通知を表示します</string>
-    <string name="settings_rhythm_guard_timer_notifications">休憩通知タイマー</string>
+    <string name="settings_rhythm_guard_timer_notifications">休憩のお知らせ</string>
     <string name="settings_rhythm_guard_timer_notifications_desc">休憩通知とアクティブなタイマーの通知を表示します</string>
     <string name="settings_rhythm_pulse_notifications">Rhythmのヒント通知</string>
     <string name="settings_rhythm_pulse_notifications_desc">個人向けのリマインダーとリスニング設定のヒントを受け取ります</string>
@@ -52,8 +52,8 @@
     <string name="settings_auto_queue_desc">再生開始時に関連した曲をキューに入れます</string>
     <string name="settings_context_queue_preference">コンテキストキューの設定</string>
     <string name="settings_context_queue_preference_desc">コンテキスト キューが最初に優先するメタデータを選択します。</string>
-    <string name="settings_context_pref_artist_first">アーティストファースト</string>
-    <string name="settings_context_pref_genre_first">ジャンル第一</string>
+    <string name="settings_context_pref_artist_first">アーティスト</string>
+    <string name="settings_context_pref_genre_first">ジャンル</string>
     <string name="settings_context_queue_persistence">コンテキストキューの永続化</string>
     <string name="settings_context_queue_persistence_desc">再生終了後もコンテキスト キューを利用可能なままにするかどうかを選択します。</string>
     <string name="settings_context_persistence_persistent">永続的</string>
@@ -66,8 +66,8 @@
     <string name="settings_remember_shuffle_mode">シャッフルモードを維持する</string>
     <string name="settings_remember_shuffle_mode_desc">再起動後、シャッフルモードに戻します。</string>
     <string name="settings_audio_effects">遷移と出力</string>
-    <string name="settings_resume_on_device_reconnect">オートレジューム</string>
-    <string name="settings_resume_on_device_reconnect_desc">オーディオデバイスの再接続時の自動再開</string>
+    <string name="settings_resume_on_device_reconnect">自動で曲を再開する</string>
+    <string name="settings_resume_on_device_reconnect_desc">オーディオデバイスが再接続されたとき自動で音楽を再開する</string>
     <string name="settings_gapless_playback">ギャップレス再生</string>
     <string name="settings_gapless_playback_desc">無音なしでトラックを切り替えます。</string>
     <string name="settings_crossfade">トラッククロスフェード</string>
@@ -455,7 +455,7 @@
     <string name="updates_install_update">アップデートのインストール</string>
     <string name="updates_cancel_download">ダウンロードをキャンセルする</string>
     <string name="cancel_download">ダウンロードをキャンセルする</string>
-    <string name="download_update">ダウンロードアップデート</string>
+    <string name="download_update">アップデートのダウンロード</string>
     <string name="updates_smart_polling">スマートポーリングがアクティブです</string>
     <string name="updates_smart_polling_desc">効率的な HTTP チェックを使用して、GitHub API 呼び出しを最小限に抑えながら更新を検出します。新しいバージョンがリリースされるとすぐに通知が届きます。</string>
     <string name="updates_channel_desc">フォローする更新チャネルを選択します:</string>
@@ -463,7 +463,7 @@
     <string name="onboarding_welcome_to">ようこそ</string>
     <string name="onboarding_welcome_subtitle">あなたの音楽、あなたの Rhythm</string>
     <string name="onboarding_get_started">始めましょう</string>
-    <string name="onboarding_android13_notice">Android 13 歳以上の注意事項</string>
+    <string name="onboarding_android13_notice">Android 13以降の通知</string>
     <string name="onboarding_android13_desc">新しい Android バージョンでは、複数の権限リクエストが表示されます。最高のエクスペリエンスを得るために、オーディオ ファイルと通知へのアクセスを許可してください。</string>
     <string name="onboarding_granted">✓ 認められる</string>
     <string name="onboarding_backup_title">データを保護する</string>
@@ -560,7 +560,7 @@
     <string name="onboarding_permission_tip_2">後で [設定] で権限を変更できます</string>
     <string name="onboarding_permission_tip_3">Rhythm はあなたのプライバシーとデータを尊重します</string>
     <!-- Onboarding Audio &amp; Playback -->
-    <string name="onboarding_default_screen_title">デフォルトのランディング画面</string>
+    <string name="onboarding_default_screen_title">起動時のデフォルト画面</string>
     <string name="onboarding_default_screen_desc">Rhythm を起動したときに開く画面を選択します</string>
     <string name="onboarding_system_volume_title">システムボリュームコントロール</string>
     <string name="onboarding_system_volume_desc">デバイスの物理音量ボタンで Rhythm の再生音量を制御できるようにします。</string>
@@ -624,7 +624,7 @@
     <string name="onboarding_gestures_title">タッチジェスチャー</string>
     <string name="onboarding_gestures_desc">直感的なスワイプとタップのジェスチャーで、音楽ライブラリをすばやくナビゲートできます。ミニ プレーヤー画面とフル プレーヤー画面のジェスチャをカスタマイズします。</string>
     <string name="onboarding_gestures_miniplayer">ミニプレーヤー</string>
-    <string name="onboarding_gestures_player">フルプレイヤー</string>
+    <string name="onboarding_gestures_player">フルプレーヤー</string>
     <string name="onboarding_gesture_swipe">ミニプレーヤーのスワイプ</string>
     <string name="onboarding_gesture_swipe_desc">ミニプレーヤーを左右にスワイプしてトラックをスキップします</string>
     <string name="onboarding_gesture_dismiss">スワイプして閉じる</string>
@@ -664,7 +664,7 @@
     <string name="onboarding_stats_feature_3">トップアーティストを発見する</string>
     <string name="onboarding_stats_feature_4">アルバムのリスニングパターンを探る</string>
     <!-- MiniPlayer Swipe Hints -->
-    <string name="miniplayer_swipe_up_hint">↑ フルプレイヤー</string>
+    <string name="miniplayer_swipe_up_hint">↑ フルプレーヤー</string>
     <string name="miniplayer_swipe_down_hint">↓ 却下</string>
     <string name="miniplayer_swipe_left_hint">次へ →</string>
     <string name="miniplayer_swipe_right_hint">← 前へ</string>
@@ -685,9 +685,9 @@
     <string name="settings_tip_rhythm_guard_auto">Rhythm Guard は安全なリスニング制限を自動的に管理します</string>
     <string name="settings_tip_rhythm_guard_manual">Rhythm のガード制限を手動で制御しています</string>
     <string name="settings_default_screen">デフォルトのランディング画面</string>
-    <string name="settings_default_screen_desc">開始画面を選択してください</string>
+    <string name="settings_default_screen_desc">起動時に自動で開く画面を選択する</string>
     <string name="settings_home_desc">新しい音楽とおすすめを発見する</string>
-    <string name="settings_library_desc">音楽コレクションへの素早いアクセス</string>
+    <string name="settings_library_desc">アルバムやプレイリストにすぐにアクセスできます。</string>
     <!-- Cache Management -->
     <string name="cache_current_status">現在のキャッシュのステータス</string>
     <string name="cache_total_size">合計キャッシュ サイズ:</string>
@@ -705,8 +705,8 @@
     <string name="lyrics_show_translation_desc">翻訳された歌詞があれば表示します</string>
     <string name="lyrics_show_romanization">ローマ字表記を表示</string>
     <string name="lyrics_show_romanization_desc">ローマ字表記の歌詞がある場合は表示します</string>
-    <string name="settings_keep_screen_on_lyrics">画面を起動したままにする</string>
-    <string name="settings_keep_screen_on_lyrics_desc">歌詞表示中に画面が消えるのを防ぐ</string>
+    <string name="settings_keep_screen_on_lyrics">スリープモードにしない</string>
+    <string name="settings_keep_screen_on_lyrics_desc">歌詞が表示されている間はスリープモードにしない</string>
     <string name="settings_show_lyrics_background_artwork">背景アートワークを表示する</string>
     <string name="settings_show_lyrics_background_artwork_desc">全画面の歌詞の後ろにぼやけたアルバムアートワークを表示</string>
     <!-- Theme Customization -->
@@ -740,9 +740,9 @@
     <string name="licenses_apache">オープンソースライセンス</string>
     <string name="licenses_attribution">このアプリは GPL-3.0 に基づいてライセンスされています。ライブラリは、Apache 2.0 または互換ライセンスに基づいてライセンスされます。</string>
     <!-- Components: Player Chip Order -->
-    <string name="player_chip_order_title">プレイヤーチップの順序</string>
-    <string name="player_chip_order_desc">プレイヤーチップをカスタマイズする</string>
-    <string name="player_chip_order_saved">プレイヤーのチップの順序と可視性が保存されました</string>
+    <string name="player_chip_order_title">プレーヤーチップの順序</string>
+    <string name="player_chip_order_desc">プレーヤーチップをカスタマイズする</string>
+    <string name="player_chip_order_saved">プレーヤーのチップの順序と可視性が保存されました</string>
     <!-- Components: Library Tab Order -->
     <string name="library_tab_order_title">ライブラリのタブオーダー</string>
     <string name="library_tab_order_desc">並べ替えと表示の切り替え</string>
@@ -902,12 +902,12 @@
     <string name="settings_backup_restore_desc">エクスポート、インポート</string>
     <string name="settings_api_management">統合</string>
     <string name="settings_api_management_desc">API、スクロブル中</string>
-    <string name="settings_section_updates_info">最新情報と情報</string>
+    <string name="settings_section_updates_info">アップデートと情報</string>
     <string name="settings_updates_title">アップデート</string>
     <string name="settings_updates_desc">アプリのアップデート</string>
-    <string name="settings_about_title">について</string>
+    <string name="settings_about_title">Rhythm について</string>
     <string name="settings_about_desc">バージョン情報</string>
-    <string name="settings_section_advanced">高度な</string>
+    <string name="settings_section_advanced">高度な設定</string>
     <string name="settings_crash_log_history">クラッシュログ履歴</string>
     <string name="settings_crash_log_history_desc">クラッシュレポート</string>
     <string name="settings_experimental_features">実験的な機能</string>
@@ -925,12 +925,12 @@
     <string name="metadata_album">アルバム</string>
     <string name="metadata_genre">ジャンル</string>
     <string name="metadata_year">年</string>
-    <string name="metadata_track">追跡</string>
+    <string name="metadata_track">トラック</string>
     <string name="metadata_saving">保存中…</string>
     <!-- Updates Actions -->
-    <string name="updates_check_now_action">今すぐチェック</string>
-    <string name="updates_check_again">もう一度確認してください</string>
-    <string name="updates_enable_auto_check">自動チェック</string>
+    <string name="updates_check_now_action">アップデートをチェックする</string>
+    <string name="updates_check_again">アップデートを再確認する</string>
+    <string name="updates_enable_auto_check">アップデートの自動チェック</string>
     <string name="updates_channel_title">チャンネルを更新する</string>
     <string name="updates_source_title">アップデートソース</string>
     <string name="updates_source_desc">Rhythm が OTA アップデートに使用するリリース ファミリーを選択します。</string>
@@ -940,7 +940,7 @@
     <string name="updates_source_fdroid_label">F-Droid ビルド</string>
     <string name="updates_source_github_desc">必ず GitHub リリース アセットをダウンロードしてください。</string>
     <string name="updates_source_fdroid_desc">必ず F-Droid リリース アセットをダウンロードしてください。</string>
-    <string name="updates_check_interval_title">更新チェック間隔</string>
+    <string name="updates_check_interval_title">更新をチェックする頻度</string>
     <!-- Cache Actions -->
     
     <!-- Backup Actions -->
@@ -953,25 +953,25 @@
     
     <!-- Accessibility - Content Descriptions -->
     <string name="cd_back">戻る</string>
-    <string name="cd_play">遊ぶ</string>
+    <string name="cd_play">再生する</string>
     <string name="cd_shuffle">シャッフル</string>
-    <string name="cd_play_album">アルバムをプレイする</string>
+    <string name="cd_play_album">アルバムを再生する</string>
     <string name="cd_previous_track">前の曲</string>
-    <string name="cd_next_track">次のトラック</string>
+    <string name="cd_next_track">次の曲</string>
     <string name="cd_filters">フィルター</string>
-    <string name="cd_refresh">リフレッシュ</string>
+    <string name="cd_refresh">更新</string>
     <string name="cd_reorder_tabs">タブの並べ替え</string>
     <string name="cd_toggle_view_type">ビュータイプの切り替え</string>
     <string name="cd_open_playlist">プレイリストを開く</string>
     <string name="cd_play_artist">%1$sをプレイ</string>
-    <string name="cd_storage">保管</string>
-    <string name="cd_pinned">固定されました</string>
+    <string name="cd_storage">ストレージ</string>
+    <string name="cd_pinned">ピン留めされた</string>
     <string name="cd_folder">フォルダー</string>
     <string name="cd_open_folder">フォルダーを開く</string>
     <string name="cd_folder_options">フォルダーオプション</string>
-    <string name="cd_export_playlists">プレイリストのエクスポート</string>
+    <string name="cd_export_playlists">プレイリストをエクスポートする</string>
     <string name="cd_import_playlist">プレイリストをインポートする</string>
-    <string name="cd_create_playlist">プレイリストの作成</string>
+    <string name="cd_create_playlist">プレイリストを作成する</string>
     <string name="cd_current_location">現在地</string>
     <string name="cd_song_info">楽曲情報</string>
     <string name="cd_no_song_playing">曲が再生されない</string>
@@ -983,11 +983,11 @@
     <string name="cd_search">検索</string>
     <string name="cd_view_all">全て見る</string>
     <string name="cd_rhythm_splash">Rhythm</string>
-    <string name="cd_remove_from_playlist">プレイリストから削除</string>
-    <string name="cd_change_language">言語の変更</string>
+    <string name="cd_remove_from_playlist">プレイリストから削除する</string>
+    <string name="cd_change_language">言語を変更する</string>
     <string name="cd_open_settings">開く</string>
-    <string name="cd_show_options">オプションを表示</string>
-    <string name="cd_app_updates">アプリのアップデート</string>
+    <string name="cd_show_options">オプションを表示する</string>
+    <string name="cd_app_updates">アプリをアップデートする</string>
     <string name="cd_completed">完成</string>
     <string name="cd_language">言語</string>
     <string name="cd_add_selected_songs">選択した曲を追加する</string>
@@ -996,7 +996,7 @@
     <!-- Bottom Sheet Titles -->
     <string name="bottomsheet_add_to_playlist">プレイリストに追加</string>
     <string name="bottomsheet_no_playlists">プレイリストはまだありません</string>
-    <string name="bottomsheet_queue">行列</string>
+    <string name="bottomsheet_queue">再生キュー</string>
     <string name="bottomsheet_up_next">次へ</string>
     <string name="bottomsheet_albums">アルバム</string>
     <string name="bottomsheet_songs">曲</string>
@@ -1090,7 +1090,7 @@
     <!-- Settings Screen - Complete -->
     <string name="settings_home_customization">ホーム</string>
     <string name="settings_home_customization_desc">クイックアクション、最近の音楽</string>
-    <string name="settings_player_customization">プレイヤー</string>
+    <string name="settings_player_customization">プレーヤー</string>
     <string name="settings_player_customization_desc">スキップボタン、プログレスバー</string>
     <string name="settings_miniplayer_customization">ミニプレーヤー</string>
     <string name="settings_miniplayer_customization_desc">背景、コントロール</string>
@@ -1352,17 +1352,17 @@
     
     <!-- More PlaceholderScreens Strings -->
     <string name="settings_double_tap_artwork_tip">アートワークをダブルタップしてクイック再生/一時停止</string>
-    <string name="settings_full_player">フルプレイヤー</string>
+    <string name="settings_full_player">フルプレーヤー</string>
     <string name="settings_header_customization">ヘッダーのカスタマイズ</string>
     <string name="settings_header_display">ヘッダー表示</string>
     <string name="settings_layout_options">レイアウトオプション</string>
     <string name="settings_miniplayer">ミニプレーヤー</string>
     <string name="settings_no_crash_logs">クラッシュ ログは見つかりませんでした。よくやった！</string>
     <string name="settings_player_controls">プレーヤーのコントロール</string>
-    <string name="settings_player_screen">プレイヤー画面</string>
+    <string name="settings_player_screen">プレーヤー画面</string>
     <string name="settings_presets">プリセット</string>
-    <string name="settings_progress_display">進捗表示</string>
-    <string name="settings_progress_hidden">進行状況は隠されています</string>
+    <string name="settings_progress_display">シークバー</string>
+    <string name="settings_progress_hidden">シークバーは表示されません</string>
     <string name="settings_reorder_toggle_sections">セクションの並べ替えと切り替え</string>
     <string name="settings_section_order_visibility">セクションの順序と可視性</string>
     <string name="settings_start_collapsed">すべての画面をヘッダーを折りたたんだ状態で開始します</string>
@@ -1609,27 +1609,27 @@
     <string name="settings_double_tap_artwork_desc">アルバムアートをダブルタップして再生/一時停止します</string>
     <!-- MiniPlayer Customization -->
     <string name="settings_miniplayer_header">ミニプレーヤー</string>
-    <string name="settings_show_progress">進行状況を表示</string>
-    <string name="settings_show_progress_desc">進行状況インジケーターの表示</string>
-    <string name="settings_show_artwork">アートワークを表示</string>
-    <string name="settings_show_artwork_desc">アルバムアートワークを表示する</string>
-    <string name="settings_show_time">ショータイム</string>
+    <string name="settings_show_progress">シークバーを表示</string>
+    <string name="settings_show_progress_desc">シークバーを表示</string>
+    <string name="settings_show_artwork">ジャケットを表示</string>
+    <string name="settings_show_artwork_desc">ジャケットを表示する</string>
+    <string name="settings_show_time">再生時間の表示</string>
     <string name="settings_show_time_desc">再生時間の表示</string>
-    <string name="settings_tablet_layout">電話機でのタブレットのレイアウト</string>
+    <string name="settings_tablet_layout">スマホでタブレットのレイアウトを使用する</string>
     <string name="settings_tablet_layout_desc">携帯電話でタブレット スタイルのミニプレーヤーを使用する</string>
     <!-- Player Customization -->
-    <string name="settings_chip_order">チップの順序と可視性</string>
-    <string name="settings_chip_order_desc">プレイヤーアクションチップのカスタマイズと並べ替え</string>
+    <string name="settings_chip_order">チップの並び替えと表示・非表示</string>
+    <string name="settings_chip_order_desc">プレーヤーアクションチップのカスタマイズと並べ替え</string>
     <string name="settings_artwork_overlay">アートワークオーバーレイ</string>
-    <string name="settings_artwork_overlay_desc">アルバムアートワークにオーバーレイを表示</string>
-    <string name="settings_song_info_artwork">アートワークの楽曲情報</string>
+    <string name="settings_artwork_overlay_desc">ジャケットに重ねて表示</string>
+    <string name="settings_song_info_artwork">楽曲情報</string>
     <string name="settings_song_info_artwork_desc">アルバム アートにタイトルとアーティストをオーバーレイ表示します</string>
-    <string name="settings_audio_quality_badges">音質バッジ</string>
-    <string name="settings_audio_quality_badges_desc">コーデックとビットレート情報の表示</string>
+    <string name="settings_audio_quality_badges">音質の表示</string>
+    <string name="settings_audio_quality_badges_desc">コーデックとビットレート情報を表示</string>
     <string name="settings_show_lyrics_player">歌詞を表示</string>
     <string name="settings_show_lyrics_player_desc">プレーヤーに同期した歌詞を表示</string>
     <string name="settings_lyrics_transition">歌詞トランジション</string>
-    <string name="settings_lyrics_transition_desc">アート↔歌詞切り替えアニメーション</string>
+    <string name="settings_lyrics_transition_desc">ジャケットと歌詞の切り替える際のアニメーション</string>
     <string name="settings_lyrics_text_size">歌詞の文字サイズ</string>
     <string name="settings_lyrics_alignment">歌詞の配置</string>
     <string name="settings_lyrics_alignment_desc">テキストの横揃え</string>
@@ -1637,20 +1637,20 @@
     <string name="settings_show_art_below_lyrics_desc">歌詞オーバーレイの下にアートを表示する</string>
     <string name="settings_seek_buttons">シークボタン</string>
     <string name="settings_seek_buttons_desc">10秒スキップ送り/戻しボタンを表示</string>
-    <string name="settings_thumb_style">親指のスタイル</string>
+    <string name="settings_thumb_style">シークバーのつまみのスタイル</string>
     <!-- Theme Customization -->
     <string name="settings_display_mode">表示モード</string>
     <string name="settings_theme_mode">テーマモード</string>
     <string name="settings_theme_mode_desc">好みのテーマを選択してください</string>
-    <string name="settings_amoled_theme">OLEDテーマ</string>
-    <string name="settings_amoled_theme_desc">OLEDディスプレイのピュアブラックテーマ</string>
+    <string name="settings_amoled_theme">有機ELディスプレイ向けテーマ</string>
+    <string name="settings_amoled_theme_desc">有機EL向けのピュアブラックテーマ</string>
     <string name="settings_color_customization">カラーカスタマイズ</string>
     <string name="settings_color_source">カラーソース</string>
-    <string name="settings_color_source_album">アルバムアート - アートワークからの抜粋</string>
-    <string name="settings_color_source_monet">システムカラー - Material あなた</string>
+    <string name="settings_color_source_album">ジャケット - ジャケットから色を抽出する</string>
+    <string name="settings_color_source_monet">システムカラー - Material You</string>
     <string name="settings_color_source_custom">カスタム スキーム - %1$s</string>
     <string name="settings_color_schemes">配色</string>
-    <string name="settings_color_schemes_desc">定義済みのカラーパレットを参照して選択します</string>
+    <string name="settings_color_schemes_desc">プリセットのカラーパレットを選択</string>
     <string name="settings_custom_only">カスタム カラー ソースでのみ使用可能</string>
     <string name="settings_font_customization">フォントのカスタマイズ</string>
     <string name="settings_font_source">フォントソース</string>
@@ -1669,7 +1669,7 @@
     <string name="settings_auto_detect_holidays_desc">休日の装飾を自動的に表示する</string>
     <string name="settings_theme_system">システム</string>
     <string name="settings_theme_light">ライト</string>
-    <string name="settings_theme_dark">暗い</string>
+    <string name="settings_theme_dark">ダーク</string>
     <string name="settings_festival_christmas">クリスマス</string>
     <string name="settings_festival_new_year">新年</string>
     <string name="settings_area_full">満杯</string>
@@ -1787,8 +1787,8 @@
     <string name="settings_shape_preset_desc">定義済みの形状コレクション</string>
     <string name="settings_shape_album_art">アルバムアートワークの形状</string>
     <string name="settings_shape_album_art_desc">アルバムアートワークの形状</string>
-    <string name="settings_shape_player_art">プレイヤーアートワークの形状</string>
-    <string name="settings_shape_player_art_desc">プレイヤーアートワークの形状</string>
+    <string name="settings_shape_player_art">プレーヤーアートワークの形状</string>
+    <string name="settings_shape_player_art_desc">プレーヤーアートワークの形状</string>
     <string name="settings_shape_song_art">ソングアートワークの形状</string>
     <string name="settings_shape_song_art_desc">ソングアートワークの形状</string>
     <string name="settings_shape_playlist_art">プレイリストアートワークの形状</string>
@@ -1824,7 +1824,7 @@
     <string name="settings_theme_import_font_desc">独自のフォントファイル（.ttf、.otf）をインポートする</string>
     <!-- Player Customization Search Strings -->
     <string name="settings_player_chip_order">チップの順序と可視性</string>
-    <string name="settings_player_chip_order_desc">プレイヤーアクションチップのカスタマイズと並べ替え</string>
+    <string name="settings_player_chip_order_desc">プレーヤーアクションチップのカスタマイズと並べ替え</string>
     <string name="settings_lyrics_show_translation">翻訳を表示</string>
     <string name="settings_lyrics_show_translation_desc">翻訳された歌詞があれば表示します</string>
     <string name="settings_lyrics_show_romanization">ローマ字表記を表示</string>
@@ -1845,20 +1845,20 @@
     <string name="settings_player_quality_badges">オーディオ品質バッジ</string>
     <string name="settings_player_quality_badges_desc">コーデックとビットレート情報の表示</string>
     <!-- MiniPlayer Customization Search Strings -->
-    <string name="settings_miniplayer_show_progress">進行状況を表示</string>
+    <string name="settings_miniplayer_show_progress">シークバーを表示</string>
     <string name="settings_miniplayer_show_progress_desc">ミニプレーヤーに進行状況インジケーターを表示する</string>
-    <string name="settings_miniplayer_progress_style">進行スタイル</string>
+    <string name="settings_miniplayer_progress_style">シークバーのスタイル</string>
     <string name="settings_miniplayer_progress_style_desc">ミニプレーヤーのプログレスバーのスタイルを選択します</string>
     <string name="settings_miniplayer_show_artwork">アートワークの表示</string>
     <string name="settings_miniplayer_show_artwork_desc">ミニプレーヤーにアルバムアートワークを表示</string>
-    <string name="settings_miniplayer_artwork_size">作品サイズ</string>
+    <string name="settings_miniplayer_artwork_size">ジャケットのサイズ</string>
     <string name="settings_miniplayer_artwork_size_desc">ミニプレーヤーでアルバムアートワークのサイズを調整する</string>
-    <string name="settings_miniplayer_corner_radius">コーナー半径</string>
+    <string name="settings_miniplayer_corner_radius">ジャケットの角を丸くする</string>
     <string name="settings_miniplayer_corner_radius_desc">ミニプレーヤーの角の丸みを調整する</string>
     <string name="settings_miniplayer_show_time">ショータイム</string>
     <string name="settings_miniplayer_show_time_desc">ミニプレーヤーでの再生時間を表示</string>
-    <string name="settings_miniplayer_tablet_layout">電話機でのタブレットのレイアウト</string>
-    <string name="settings_miniplayer_tablet_layout_desc">携帯電話でタブレット スタイルのミニプレーヤーを使用する</string>
+    <string name="settings_miniplayer_tablet_layout">スマホでタブレットのレイアウトを使用する</string>
+    <string name="settings_miniplayer_tablet_layout_desc">スマホでタブレット向けのデザインのミニプレーヤーを使用する</string>
     <!-- Library Screen scanning overlay -->
     <string name="settings_scanning">スキャン</string>
     <!-- Settings Search -->
@@ -1877,7 +1877,7 @@
     <string name="exp_launch_onboarding_desc">Rhythm ツアー体験をリセットして再起動します</string>
     <string name="exp_test_crash">テストクラッシュ</string>
     <string name="exp_test_crash_desc">クラッシュ処理とレポートをテストするためにアプリを強制的にクラッシュさせます。</string>
-    <string name="exp_force_player_compact_mode">フォースプレイヤーコンパクトモード</string>
+    <string name="exp_force_player_compact_mode">フォースプレーヤーコンパクトモード</string>
     <string name="exp_force_player_compact_mode_desc">プレーヤー画面で強制的にコンパクト モードを使用する</string>
     <string name="exp_third_party_integrations">サードパーティの統合</string>
     <string name="settings_backup_created">バックアップが正常に作成されました</string>
@@ -1896,7 +1896,7 @@
     <!-- Theme, CrashLog, Home, Lyrics, Shapes, API Strings -->
     <string name="settings_crash_log">クラッシュログ履歴</string>
     <string name="settings_expressive_shapes">表現力豊かな形状</string>
-    <string name="settings_home_screen">家</string>
+    <string name="settings_home_screen">ホーム</string>
     <string name="settings_lyrics_source">歌詞</string>
     <string name="settings_theme">テーマ</string>
     <string name="theme_auto_detect">祝日の自動検出</string>
@@ -2130,8 +2130,8 @@
     <string name="homescreencustomizationsettingsscreen_album_count">アルバム数</string>
     <string name="librarysettingsscreen_autofetch_artwork">アートワークの自動取得</string>
     <string name="lyricssourcesettingsscreen_online_api_options">オンライン API オプション</string>
-    <string name="lyricssourcesettingsscreen_lyrics_api_priority">歌詞 API の優先順位</string>
-    <string name="lyricssourcesettingsscreen_choose_which_online_lyrics">最初に検索するオンライン歌詞 API を選択してください</string>
+    <string name="lyricssourcesettingsscreen_lyrics_api_priority">歌詞提供サービスの優先順位</string>
+    <string name="lyricssourcesettingsscreen_choose_which_online_lyrics">優先的に使用する歌詞表示サービスを選択してください</string>
     <string name="lyricssourcesettingsscreen_retry_using_fallbacks">フォールバックを使用したリトライ</string>
     <string name="lyricssourcesettingsscreen_embedded_lyrics_are_stored">• Embedded lyrics are stored in your audio files</string>
     <string name="miniplayercustomizationsettingsscreen_miniplayer_theme">ミニプレーヤーのテーマ</string>
@@ -2145,7 +2145,7 @@
     <string name="performancesettingsscreen_disable_auto_fetch_artwork">アートワークの自動取得を無効にする</string>
     <string name="placeholdersettingsscreen_choose_a_setting_from">左側のパネルから設定を選択します</string>
     <string name="placeholdersettingsscreen_tap_on_any_setting">設定オプションをタップして、ここで設定を表示および変更します</string>
-    <string name="playercustomizationsettingsscreen_player_theme">プレイヤーテーマ</string>
+    <string name="playercustomizationsettingsscreen_player_theme">プレーヤーテーマ</string>
     <string name="playercustomizationsettingsscreen_playback_theme">再生テーマ</string>
     <string name="playercustomizationsettingsscreen_tap_lyrics_for_immersive">歌詞をタップしてイマーシブビューを表示</string>
     <string name="rhythmguardsettingsscreen_choose_sections">セクションの選択</string>
@@ -2273,10 +2273,10 @@
     <string name="settings_tip_controls_inactive_desc_2">クリーンレイアウトが有効です。シーク コントロールを再度有効にして、より細かい再生処理を行います。</string>
     <string name="settings_tip_miniplayer_active_desc_1">ミニプレーヤーの進行状況が表示されます。テーマに合ったスタイルを選択してください。</string>
     <string name="settings_tip_miniplayer_active_desc_2">ミニプレーヤーでプログレスバーがアクティブになります。次に、形状と角の微調整を試してください。</string>
-    <string name="settings_tip_miniplayer_inactive_desc_1">ミニプレイヤーの進行状況は非表示になります。トラックを素早く認識するにはこれを有効にします。</string>
+    <string name="settings_tip_miniplayer_inactive_desc_1">ミニプレーヤーの進行状況は非表示になります。トラックを素早く認識するにはこれを有効にします。</string>
     <string name="settings_tip_miniplayer_inactive_desc_2">コンパクトモードは最小限になりました。一目で分かりやすくするために進行状況をオンにします。</string>
     <!-- Lyrics Source Dialog -->
-    <string name="lyrics_source_embedded_first">埋め込みが先</string>
+    <string name="lyrics_source_embedded_first">曲に埋め込まれた歌詞を優先的に表示させる</string>
     <string name="lyrics_source_embedded_first_desc">オーディオ ファイルのメタデータ → オンライン API → .lrc ファイルを試す</string>
     <string name="lyrics_source_api_first">API ファースト</string>
     <string name="lyrics_source_api_first_desc">オンライン サービスを試す → オーディオ メタデータ → .lrc ファイル</string>
@@ -2287,7 +2287,7 @@
     <string name="color_source_album_art">アルバムアート</string>
     <string name="color_source_album_art_desc">現在再生中のアルバムアートワークから色を抽出する</string>
     <string name="color_source_system_colors">システムカラー</string>
-    <string name="color_source_system_colors_desc">壁紙から Material 色の色を使用します</string>
+    <string name="color_source_system_colors_desc">ホーム画面の壁紙から生成された Material Color を使用する</string>
     <string name="color_source_custom_scheme">カスタムスキーム</string>
     <string name="color_source_custom_scheme_desc">定義済みの配色から選択する</string>
     <string name="font_source_system_font">システムフォント</string>
@@ -2334,11 +2334,11 @@
     <string name="lyrics_settings_open_fullscreen_desc">歌詞ビューをタップして全画面歌詞画面を開く</string>
     <string name="lyrics_settings_autohide_controls">歌詞の自動非表示コントロール</string>
     <string name="lyrics_settings_autohide_controls_desc">数秒間操作が行われなかった場合、全画面歌詞画面のコントロールを自動的に非表示にします</string>
-    <string name="lyrics_settings_embedded_first">埋め込みが先</string>
+    <string name="lyrics_settings_embedded_first">曲に埋め込まれた歌詞を優先的に表示させる</string>
     <string name="lyrics_settings_embedded_first_desc">オーディオ ファイルに埋め込まれた歌詞を好み、オンライン API にフォールバックする</string>
-    <string name="lyrics_settings_online_first">オンラインファースト</string>
+    <string name="lyrics_settings_online_first">オンラインの歌詞提供サービスを優先させる</string>
     <string name="lyrics_settings_online_first_desc">オンライン API (Rhythm ワードごと、LRCLib) を優先し、組み込みにフォールバックします</string>
-    <string name="lyrics_settings_local_first">ローカルファースト</string>
+    <string name="lyrics_settings_local_first">LRC形式のファイルの歌詞の表示を優先する</string>
     <string name="lyrics_settings_local_first_desc">ローカルの .lrc ファイル、次に埋め込み歌詞、次にオンライン API を優先します</string>
     <string name="lyrics_settings_lyrically_first">Lyrically First</string>
     <string name="lyrics_settings_lrclib_first">LRCLib ファースト</string>
@@ -2346,7 +2346,7 @@
     <string name="lyrics_settings_display_styling">ディスプレイとスタイリング</string>
     <string name="lyrics_settings_size_percentage">サイズ: %1$d%%</string>
     <string name="alignment_left">左</string>
-    <string name="alignment_center">センター</string>
+    <string name="alignment_center">中央</string>
     <string name="alignment_right">右</string>
     <string name="animation_slide">スライド</string>
     <string name="animation_fade">フェード</string>
@@ -2530,7 +2530,7 @@
     <string name="shape_option_triangle">三角形</string>
     <string name="shape_option_pentagon">五角形</string>
     <string name="shape_option_flower">花</string>
-    <string name="shape_option_heart">心臓</string>
+    <string name="shape_option_heart">ハート</string>
     <string name="shape_option_bun">バン</string>
     <string name="shape_option_boom">ブーム</string>
     <string name="shape_option_soft_boom">ソフトブーム</string>
@@ -2616,11 +2616,11 @@
     <string name="carousel_style_hero_desc">サイドピークアルバム1枚</string>
     <!-- Theme names -->
     <string name="theme_rhythm">Rhythm</string>
-    <string name="theme_expressive">表現力豊か</string>
+    <string name="theme_expressive">Expressive</string>
     <string name="settings_managed_by_expressive_shapes">表現力豊かな形状による管理</string>
     <!-- Shape targets -->
     <string name="shape_target_album_art">アルバムアートワーク</string>
-    <string name="shape_target_player_art">プレイヤーアートワーク</string>
+    <string name="shape_target_player_art">プレーヤーアートワーク</string>
     <string name="shape_target_song_art">ソングアートワーク</string>
     <string name="shape_target_playlist_art">プレイリストアートワーク</string>
     <string name="shape_target_artist_art">アーティストアートワーク</string>
@@ -2716,4 +2716,35 @@
     <string name="settings_queue_display">再生キューを表示</string>
     <string name="settings_respect_album_on_play">アルバムとアーティストを再生する</string>
     <string name="settings_respect_album_on_play_desc">アルバムやアーティスト内の曲をタップすると、その続きが再生されます</string>
+    <string name="widget_tip_resize_settings">ウィジェットを長押しすると、サイズの変更や設定を開くことができます</string>
+    <string name="device_speaker">端末のスピーカー</string>
+    <string name="eq_preset_type_autoeq">オートイコライザー</string>
+    <string name="eq_save_preset">プリセットを保存</string>
+    <string name="eq_save_custom_preset">カスタムプリセットを保存</string>
+    <string name="eq_preset_delete_title">プリセットを削除</string>
+    <string name="eq_preset_delete_confirm">%1$s を本当に削除しますか？</string>
+    <string name="eq_preset_deleted">プリセットは削除されました</string>
+    <string name="settings_labs">実験的な機能</string>
+    <string name="settings_tap_artwork_lyrics">ジャケットをタップして歌詞を表示</string>
+    <string name="settings_tap_artwork_lyrics_desc">ジャケットをタップして同期した歌詞を表示させる</string>
+    <string name="settings_miniplayer_swipe_tracks">曲を切り替える</string>
+    <string name="settings_miniplayer_swipe_tracks_desc">ミニプレーヤーを左右にスワイプして曲を切り替える</string>
+    <string name="settings_miniplayer_swipe_dismiss">ミニプレーヤーを上下にスワイプしてプレーヤーを表示させる</string>
+    <string name="settings_miniplayer_swipe_dismiss_desc">上にスワイプさせるとプレーヤーが開き、下にスワイプすると縮小します</string>
+    <string name="settings_queue_gestures">キュー</string>
+    <string name="settings_queue_swipe_remove">スワイプしてキューから曲を削除</string>
+    <string name="settings_queue_swipe_remove_desc">左右にスワイプしてキューから曲を削除</string>
+    <string name="settings_lyrics_tap_seek">歌詞をタップして移動</string>
+    <string name="settings_thumb_rotate">再生中につまみを回転させる</string>
+    <string name="settings_thumb_rotate_desc">再生中につまみがゆっくり回転します。</string>
+    <string name="settings_theme_intensity">テーマの色調</string>
+    <string name="settings_theme_intensity_desc">テーマカラーの鮮やかさや濃淡を調整します。</string>
+    <string name="theme_intensity_standard">標準</string>
+    <string name="theme_intensity_standard_desc">バランスの取れた Material 3 の色調と自然なコントラスト</string>
+    <string name="theme_intensity_medium">中</string>
+    <string name="theme_intensity_medium_desc">アクセントカラーを強調させ、より目立たせます。</string>
+    <string name="theme_intensity_vivid">ビビッド</string>
+    <string name="theme_intensity_vivid_desc">鮮やかさを強調し、ダイナミックな色調</string>
+    <string name="settings_floating_navigation">フローティングナビゲーションバー</string>
+    <string name="settings_floating_navigation_desc">ナビゲーションバーを独立させた表示にします。</string>
 </resources>

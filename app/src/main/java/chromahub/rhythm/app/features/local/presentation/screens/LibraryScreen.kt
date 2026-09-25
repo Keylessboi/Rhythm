@@ -119,6 +119,7 @@ import chromahub.rhythm.app.shared.presentation.components.common.songFastScroll
 import chromahub.rhythm.app.shared.presentation.components.common.albumFastScrollLabel
 import chromahub.rhythm.app.shared.presentation.components.common.artistFastScrollLabel
 import chromahub.rhythm.app.shared.presentation.components.common.playlistFastScrollLabel
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import android.net.Uri
 import android.util.Log
 import chromahub.rhythm.app.util.PlaylistImportExportUtils
@@ -1510,7 +1511,8 @@ fun LibraryScreen(
                     state = tabRowState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(8.dp),
+                        .padding(8.dp)
+                        .horizontalEdgeBlend(lazyListState = tabRowState, fadeWidth = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
@@ -1696,10 +1698,14 @@ fun LibraryScreen(
                                     .padding(horizontal = 16.dp, vertical = 2.dp)
                             ) {
                                 if (currentTabId == "SONGS") {
+                                    val categoryRowState = rememberLazyListState()
                                     LazyRow(
+                                        state = categoryRowState,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalEdgeBlend(lazyListState = categoryRowState, fadeWidth = 14.dp)
                                     ) {
                                         items(
                                             items = categories,

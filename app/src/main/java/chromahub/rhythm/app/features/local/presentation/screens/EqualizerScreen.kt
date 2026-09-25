@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -87,12 +86,15 @@ import kotlin.system.exitProcess
 import chromahub.rhythm.app.shared.presentation.components.Material3SettingsGroup
 import chromahub.rhythm.app.shared.presentation.components.Material3SettingsItem
 import chromahub.rhythm.app.shared.presentation.components.common.CollapsibleHeaderScreen
+import chromahub.rhythm.app.shared.presentation.components.common.RhythmGroupedMenuContent
+import chromahub.rhythm.app.shared.presentation.components.common.RhythmMenuItem
 import chromahub.rhythm.app.shared.presentation.components.common.ArcProgressSlider
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.StandardBottomSheetHeader
 import chromahub.rhythm.app.shared.presentation.components.common.StyledProgressBar
 import chromahub.rhythm.app.shared.presentation.components.common.ProgressStyle
 import chromahub.rhythm.app.shared.presentation.components.common.ThumbStyle
 import chromahub.rhythm.app.shared.presentation.components.common.CookieHorizontalSlider
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.LicensesBottomSheet
 import chromahub.rhythm.app.ui.utils.LazyListStateSaver
 import chromahub.rhythm.app.features.local.presentation.viewmodel.MusicViewModel
@@ -217,7 +219,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -229,9 +230,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.Snackbar
@@ -585,24 +584,24 @@ fun EqualizerScreen(
         showBackButton = true,
         onBackClick = { navController.popBackStack() },
         actions = {
-            // More Options Button - styled symmetrically to match back button
             IconButton(
                 onClick = {
-                    HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
+                    HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
                     showMenu = true
                 }
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .width(32.dp)
+                        .height(40.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = RhythmIcons.More,
                         contentDescription = stringResource(R.string.content_desc_more_options),
-                        tint = MaterialTheme.colorScheme.onSurface,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -612,119 +611,56 @@ fun EqualizerScreen(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false },
                 modifier = Modifier
+                    .widthIn(min = 220.dp)
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(4.dp),
                 shape = RoundedCornerShape(20.dp)
             ) {
-                val menuItems = listOf(
-                    Triple(
-                        stringResource(R.string.eq_reorder_presets),
-                        MaterialSymbolIcon("sort", filled = true),
-                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f) to MaterialTheme.colorScheme.onSecondaryContainer
-                    ) to {
-                        HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
-                        showMenu = false
-                        showReorderSheet = true
-                    },
-                    Triple(
-                        stringResource(R.string.equalizerscreen_autoeq_profiles),
-                        MaterialSymbolIcon("headphones", filled = true),
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) to MaterialTheme.colorScheme.onPrimaryContainer
-                    ) to {
-                        HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
-                        showMenu = false
-                        showAutoEQSelector = true
-                    },
-                    Triple(
-                        stringResource(R.string.eq_manage_all_devices),
-                        MaterialSymbolIcon("tune", filled = true),
-                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f) to MaterialTheme.colorScheme.onTertiaryContainer
-                    ) to {
-                        HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
-                        showMenu = false
-                        showDeviceConfigSheet = true
-                    },
-                    Triple(
-                        stringResource(R.string.eq_system_equalizer),
-                        RhythmIcons.Equalizer,
-                        MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
-                    ) to {
-                        HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
-                        showMenu = false
-                        val activity = context as? Activity
-                        viewModel.openSystemEqualizer(activity, MainActivity.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL_REQUEST)
-                    }
-                )
-
-                val outerRadius = 16.dp
-                val innerRadius = 4.dp
-                val itemSpacing = 3.dp
-
-                Column(
-                    modifier = Modifier
-                        .widthIn(min = 220.dp)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(itemSpacing)
-                ) {
-                    menuItems.forEachIndexed { index, (itemData, onClick) ->
-                        val (title, icon, colors) = itemData
-                        val (bgColor, tintColor) = colors
-
-                        val itemShape = when {
-                            menuItems.size == 1 -> RoundedCornerShape(outerRadius)
-                            index == 0 -> RoundedCornerShape(
-                                topStart = outerRadius, topEnd = outerRadius,
-                                bottomStart = innerRadius, bottomEnd = innerRadius
-                            )
-                            index == menuItems.size - 1 -> RoundedCornerShape(
-                                topStart = innerRadius, topEnd = innerRadius,
-                                bottomStart = outerRadius, bottomEnd = outerRadius
-                            )
-                            else -> RoundedCornerShape(innerRadius)
-                        }
-
-                        Surface(
-                            onClick = onClick,
-                            shape = itemShape,
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    modifier = Modifier.size(28.dp),
-                                    shape = CircleShape,
-                                    color = bgColor
-                                ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier.fillMaxSize()
-                                    ) {
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = null,
-                                            tint = tintColor,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(10.dp))
-
-                                Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f)
-                                )
+                RhythmGroupedMenuContent(
+                    items = listOf(
+                        RhythmMenuItem(
+                            title = stringResource(R.string.eq_reorder_presets),
+                            icon = MaterialSymbolIcon("sort", filled = true),
+                            iconContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            onClick = {
+                                showMenu = false
+                                showReorderSheet = true
                             }
-                        }
-                    }
-                }
+                        ),
+                        RhythmMenuItem(
+                            title = stringResource(R.string.equalizerscreen_autoeq_profiles),
+                            icon = MaterialSymbolIcon("headphones", filled = true),
+                            iconContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            onClick = {
+                                showMenu = false
+                                showAutoEQSelector = true
+                            }
+                        ),
+                        RhythmMenuItem(
+                            title = stringResource(R.string.eq_manage_all_devices),
+                            icon = MaterialSymbolIcon("tune", filled = true),
+                            iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
+                            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            onClick = {
+                                showMenu = false
+                                showDeviceConfigSheet = true
+                            }
+                        ),
+                        RhythmMenuItem(
+                            title = stringResource(R.string.eq_system_equalizer),
+                            icon = RhythmIcons.Equalizer,
+                            iconContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            onClick = {
+                                showMenu = false
+                                val activity = context as? Activity
+                                viewModel.openSystemEqualizer(activity, MainActivity.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL_REQUEST)
+                            }
+                        )
+                    )
+                )
             }
         },
         headerContent = {
@@ -829,6 +765,7 @@ fun EqualizerScreen(
         val presetsContent: @Composable () -> Unit = {
             LazyRow(
                 state = presetRowState,
+                modifier = Modifier.horizontalEdgeBlend(lazyListState = presetRowState, fadeWidth = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 contentPadding = PaddingValues(horizontal = 8.dp)
             ) {

@@ -53,12 +53,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import chromahub.rhythm.app.R
 import chromahub.rhythm.app.shared.data.model.Song
 import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveShapeTarget
 import chromahub.rhythm.app.shared.presentation.components.common.M3PlaceholderType
+import chromahub.rhythm.app.shared.presentation.components.common.MarqueeText
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShape
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShapeFor
 import chromahub.rhythm.app.shared.presentation.components.icons.Icon
@@ -161,7 +161,7 @@ fun SongOverflowBottomSheet(
                 add(
                     SongOverflowItem(
                         title = context.getString(R.string.action_add_to_queue),
-                        icon = MaterialSymbolIcon("add_to_queue"),
+                        icon = RhythmIcons.AddToQueue,
                         onClick = action
                     )
                 )
@@ -179,7 +179,7 @@ fun SongOverflowBottomSheet(
                 add(
                     SongOverflowItem(
                         title = context.getString(R.string.multiselectionbottomsheet_go_to_artist),
-                        icon = MaterialSymbolIcon("group"),
+                        icon = RhythmIcons.Artist,
                         onClick = action
                     )
                 )
@@ -207,7 +207,7 @@ fun SongOverflowBottomSheet(
                 add(
                     SongOverflowItem(
                         title = context.getString(R.string.action_song_info),
-                        icon = MaterialSymbolIcon("badge"),
+                        icon = RhythmIcons.Info,
                         onClick = action
                     )
                 )
@@ -339,21 +339,23 @@ fun SongOverflowBottomSheet(
 
                         Spacer(modifier = Modifier.height(2.dp))
 
-                        Text(
+                        MarqueeText(
                             text = song.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.fillMaxWidth()
                         )
 
-                        Text(
+                        MarqueeText(
                             text = song.artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -453,13 +455,13 @@ fun SongOverflowBottomSheet(
 
                                 Spacer(modifier = Modifier.width(16.dp))
 
-                                Text(
+                                MarqueeText(
                                     text = item.title,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium,
-                                    color = itemColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        color = itemColor
+                                    ),
+                                    gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     modifier = Modifier.weight(1f)
                                 )
                             }

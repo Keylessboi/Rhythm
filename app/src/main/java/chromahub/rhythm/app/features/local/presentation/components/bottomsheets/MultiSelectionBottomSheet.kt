@@ -6,6 +6,7 @@
 package chromahub.rhythm.app.shared.presentation.components.bottomsheets
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.SheetAdaptiveType
 
+import chromahub.rhythm.app.shared.presentation.components.common.MarqueeText
 import chromahub.rhythm.app.shared.presentation.components.icons.RhythmIcons
 import chromahub.rhythm.app.shared.presentation.components.icons.MaterialSymbolIcon
 import chromahub.rhythm.app.shared.presentation.components.icons.Icon
@@ -237,7 +238,7 @@ fun MultiSelectionBottomSheet(
                             }
                             add(
                                 MultiOptionItem(
-                                    icon = RhythmIcons.Queue,
+                                    icon = RhythmIcons.AddToQueue,
                                     text = context.getString(R.string.action_add_to_queue),
                                     containerColor = primaryContainer,
                                     iconColor = onPrimaryContainer,
@@ -461,11 +462,13 @@ private fun MultiSelectionHeader(
                     )
                     
                     if (selectedSongs.isNotEmpty()) {
-                        Text(
+                        MarqueeText(
                             text = "${selectedSongs.first().artist} • ${selectedSongs.first().album}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -501,24 +504,12 @@ private fun SongOptionGridItem(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Surface(
-                modifier = Modifier.size(36.dp),
-                shape = CircleShape,
-                color = containerColor.copy(alpha = 0.25f),
-                tonalElevation = 0.dp
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
             
             Spacer(modifier = Modifier.height(12.dp))
             

@@ -16,6 +16,7 @@ import chromahub.rhythm.app.shared.presentation.components.icons.RhythmIcons
 import chromahub.rhythm.app.shared.presentation.components.icons.MaterialSymbolIcon
 import chromahub.rhythm.app.shared.presentation.components.icons.Icon
 import chromahub.rhythm.app.shared.presentation.components.common.RhythmGroupedButton
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.presentation.components.common.RhythmButtonWeighted
 import chromahub.rhythm.app.shared.presentation.components.common.RhythmButtonSize
 import chromahub.rhythm.app.shared.presentation.components.common.RhythmButtonType
@@ -1230,7 +1231,10 @@ internal fun AddEditDeviceDialog(
                     fontWeight = FontWeight.SemiBold
                 )
                 
+                val deviceTypeRowState = rememberLazyListState()
                 LazyRow(
+                    state = deviceTypeRowState,
+                    modifier = Modifier.horizontalEdgeBlend(lazyListState = deviceTypeRowState, fadeWidth = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(UserAudioDevice.DeviceType.entries.toList()) { type ->

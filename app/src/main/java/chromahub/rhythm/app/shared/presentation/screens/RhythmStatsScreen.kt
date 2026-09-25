@@ -67,6 +67,7 @@ import chromahub.rhythm.app.shared.presentation.components.common.CollapsibleHea
 import chromahub.rhythm.app.shared.presentation.components.common.TabAnimation
 import chromahub.rhythm.app.shared.presentation.components.common.SmallTabAnimation
 import chromahub.rhythm.app.shared.presentation.components.common.M3CircularLoader
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShapeFor
 import chromahub.rhythm.app.util.M3ImageUtils
 import chromahub.rhythm.app.util.HapticUtils
@@ -298,7 +299,8 @@ private fun RhythmTimeRangeTabs(
         state = tabRowState,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .horizontalEdgeBlend(lazyListState = tabRowState, fadeWidth = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {

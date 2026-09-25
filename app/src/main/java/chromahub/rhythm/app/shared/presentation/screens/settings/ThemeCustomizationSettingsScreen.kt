@@ -114,6 +114,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import kotlin.system.exitProcess
 import chromahub.rhythm.app.shared.presentation.components.common.CollapsibleHeaderScreen
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.presentation.components.common.ButtonGroupStyle
 import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveScrollBar
 import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveButtonGroup
@@ -1146,8 +1147,12 @@ fun ColorSchemePaletteRow(
     onSchemeSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val paletteRowState = rememberLazyListState()
     LazyRow(
-        modifier = modifier.fillMaxWidth(),
+        state = paletteRowState,
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalEdgeBlend(lazyListState = paletteRowState, fadeWidth = 14.dp),
         contentPadding = PaddingValues(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically

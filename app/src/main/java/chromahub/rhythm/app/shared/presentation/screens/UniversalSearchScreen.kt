@@ -13,6 +13,8 @@ import chromahub.rhythm.app.shared.presentation.components.icons.RhythmIcons
 import chromahub.rhythm.app.shared.presentation.components.icons.MaterialSymbolIcon
 import chromahub.rhythm.app.shared.presentation.components.icons.Icon
 import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveCookieEmptyState
+import chromahub.rhythm.app.shared.presentation.components.common.MarqueeText
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShape
 import chromahub.rhythm.app.shared.presentation.components.common.M3CircularLoader
 
@@ -1240,8 +1242,13 @@ fun UniversalSearchScreen(
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
+                val filterChipsScrollState = rememberScrollState()
                 Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(filterChipsScrollState)
+                        .padding(top = 12.dp)
+                        .horizontalEdgeBlend(scrollState = filterChipsScrollState, fadeWidth = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val songsCornerRadius by animateDpAsState(
@@ -2146,7 +2153,7 @@ fun UniversalSongOptionsBottomSheet(
                                 )
                                 add(
                                     UniversalOptionItem(
-                                        icon = RhythmIcons.Queue,
+                                        icon = RhythmIcons.AddToQueue,
                                         text = context.getString(R.string.action_add_to_queue),
                                         containerColor = primaryContainer,
                                         iconColor = onPrimaryContainer,
@@ -2382,20 +2389,23 @@ private fun UniversalSongOptionsHeader(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    Text(
+                    MarqueeText(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        gradientEdgeColor = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.fillMaxWidth()
                     )
 
-                    Text(
+                    MarqueeText(
                         text = "$artist • $album",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        gradientEdgeColor = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -2462,24 +2472,12 @@ private fun UniversalSongOptionGridItem(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Surface(
-                modifier = Modifier.size(36.dp),
-                shape = CircleShape,
-                color = containerColor.copy(alpha = 0.25f),
-                tonalElevation = 0.dp
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 

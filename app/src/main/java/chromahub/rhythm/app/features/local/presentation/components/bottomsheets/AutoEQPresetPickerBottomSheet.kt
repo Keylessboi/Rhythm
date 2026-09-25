@@ -44,6 +44,7 @@ import chromahub.rhythm.app.R
 import androidx.compose.ui.res.stringResource
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.AdaptiveSheetScrollContainer
 import chromahub.rhythm.app.shared.presentation.components.common.M3CircularLoader
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.data.model.UserAudioDevice
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextAlign
@@ -217,10 +218,13 @@ fun AutoEQPresetPickerBottomSheet(
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
+                val activeFilterRowState = rememberLazyListState()
                 LazyRow(
+                    state = activeFilterRowState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .horizontalEdgeBlend(lazyListState = activeFilterRowState, fadeWidth = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -674,12 +678,15 @@ private fun FilterSection(
             }
         }
 
+        val chipRowState = rememberLazyListState()
         LazyRow(
+            state = chipRowState,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 4.dp)
+                .horizontalEdgeBlend(lazyListState = chipRowState, fadeWidth = 20.dp)
         ) {
             items(items.size) { index ->
                 val item = items[index]

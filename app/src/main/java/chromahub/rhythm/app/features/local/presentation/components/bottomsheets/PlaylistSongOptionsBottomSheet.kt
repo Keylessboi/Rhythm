@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BottomSheetDefaults
@@ -72,6 +71,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import chromahub.rhythm.app.util.ImageUtils
 import chromahub.rhythm.app.shared.presentation.components.common.M3PlaceholderType
+import chromahub.rhythm.app.shared.presentation.components.common.MarqueeText
 import androidx.compose.ui.layout.ContentScale
 
 private data class OptionItem(
@@ -225,21 +225,23 @@ fun PlaylistSongOptionsBottomSheet(
 
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            Text(
+                            MarqueeText(
                                 text = song.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth()
                             )
 
-                            Text(
+                            MarqueeText(
                                 text = song.artist,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -279,7 +281,7 @@ fun PlaylistSongOptionsBottomSheet(
                             )
                             add(
                                 OptionItem(
-                                    icon = RhythmIcons.Queue,
+                                    icon = RhythmIcons.AddToQueue,
                                     text = context.getString(R.string.action_add_to_queue),
                                     containerColor = primaryContainer,
                                     iconColor = onPrimaryContainer,
@@ -340,7 +342,7 @@ fun PlaylistSongOptionsBottomSheet(
                             if (showRemoveFromPlaylist) {
                                 add(
                                     OptionItem(
-                                        icon = RhythmIcons.Remove,
+                                        icon = MaterialSymbolIcon("playlist_remove"),
                                         text = context.getString(R.string.cd_remove_from_playlist),
                                         containerColor = errorContainer,
                                         iconColor = errorColor,
@@ -459,24 +461,12 @@ private fun SongOptionGridItem(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Surface(
-                modifier = Modifier.size(36.dp),
-                shape = CircleShape,
-                color = containerColor.copy(alpha = 0.25f),
-                tonalElevation = 0.dp
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
             
             Spacer(modifier = Modifier.height(12.dp))
             

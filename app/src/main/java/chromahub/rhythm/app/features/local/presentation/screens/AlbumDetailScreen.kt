@@ -61,6 +61,7 @@ import chromahub.rhythm.app.shared.data.model.findAlbumForRoute
 import chromahub.rhythm.app.shared.presentation.components.player.PlayingEqIcon
 import chromahub.rhythm.app.shared.presentation.components.AudioQualityIcon
 import chromahub.rhythm.app.shared.presentation.components.common.M3PlaceholderType
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.presentation.components.common.M3CircularLoader
 import chromahub.rhythm.app.util.ImageUtils
 import chromahub.rhythm.app.util.HapticUtils
@@ -1258,8 +1259,12 @@ private fun AlbumDiscFilterChips(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp)
 ) {
+    val discRowState = rememberLazyListState()
     LazyRow(
-        modifier = modifier.fillMaxWidth(),
+        state = discRowState,
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalEdgeBlend(lazyListState = discRowState, fadeWidth = 24.dp),
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {

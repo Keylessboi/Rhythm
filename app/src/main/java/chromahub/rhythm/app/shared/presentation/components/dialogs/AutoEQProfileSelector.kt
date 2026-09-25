@@ -12,6 +12,7 @@ import chromahub.rhythm.app.shared.presentation.components.bottomsheets.RhythmAd
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.SheetAdaptiveType
 import androidx.compose.foundation.lazy.rememberLazyListState
 import chromahub.rhythm.app.shared.presentation.components.common.M3CircularLoader
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 
 import chromahub.rhythm.app.shared.presentation.components.icons.RhythmIcons
 import chromahub.rhythm.app.shared.presentation.components.icons.Icon
@@ -270,9 +271,12 @@ fun AutoEQProfileSelector(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 8.dp)
                 )
+                val brandRowState = rememberLazyListState()
                     LazyRow(
+                        state = brandRowState,
                         contentPadding = PaddingValues(horizontal = 5.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalEdgeBlend(lazyListState = brandRowState, fadeWidth = 12.dp)
                     ) {
                         item {
                             val isSelected = selectedBrand == null
@@ -348,9 +352,12 @@ fun AutoEQProfileSelector(
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 8.dp)
                     )
+                    val typeRowState = rememberLazyListState()
                     LazyRow(
+                        state = typeRowState,
                         contentPadding = PaddingValues(horizontal = 5.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalEdgeBlend(lazyListState = typeRowState, fadeWidth = 12.dp)
                     ) {
                         item {
                             val isSelected = selectedType == null

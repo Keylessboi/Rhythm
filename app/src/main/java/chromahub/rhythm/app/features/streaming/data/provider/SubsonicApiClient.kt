@@ -469,6 +469,25 @@ class SubsonicApiClient(context: Context) {
         ).map { true }
     }
 
+    suspend fun reportPlaybackProgress(id: String, positionMs: Long, isPaused: Boolean): Result<Boolean> {
+        if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
+        if (id.isBlank()) return Result.failure(IllegalArgumentException("Id is required"))
+
+        val state = if (isPaused) "pause" else "progress"
+        val openSubsonicResult = requestAndParse(
+            "reportPlayback",
+            mapOf(
+                "mediaId" to id,
+                "mediaType" to "song",
+                "positionMs" to positionMs.toString(),
+                "state" to state
+            )
+        )
+        if (openSubsonicResult.isSuccess) return Result.success(true)
+
+        return scrobble(id, submission = false)
+    }
+
     suspend fun createPlaylist(name: String, songIds: List<String> = emptyList()): Result<ProviderPlaylist> {
         if (!isConnected()) return Result.failure(IllegalStateException("Subsonic service is not connected"))
         if (name.isBlank()) return Result.failure(IllegalArgumentException("Playlist name is required"))
@@ -657,6 +676,35 @@ class SubsonicApiClient(context: Context) {
         if (maxBitRateKbps > 0) {
             urlBuilder.addQueryParameter("maxBitRate", maxBitRateKbps.toString())
         }
+        if (!format.isNullOrBlank()) {
+            urlBuilder.addQueryParameter("format", format)
+        }
+
+        return urlBuilder.build().toString()
+    }
+
+    fun buildDownloadUrl(songId: String, format: String? = null): String? {
+        val cred = credentials ?: return null
+        if (songId.isBlank()) return null
+
+        val parsedUrl = "${cred.serverUrl}/rest/download.view".toHttpUrlOrNull() ?: return null
+        val urlBuilder = parsedUrl.newBuilder()
+            .addQueryParameter("u", cred.username)
+
+        if (usePasswordAuth) {
+            val obfuscated = "enc:" + cred.password.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+            urlBuilder.addQueryParameter("p", obfuscated)
+        } else {
+            val (token, salt) = generateAuthParams(cred.password)
+            urlBuilder.addQueryParameter("t", token)
+            urlBuilder.addQueryParameter("s", salt)
+        }
+
+        urlBuilder.addQueryParameter("v", API_VERSION)
+            .addQueryParameter("c", CLIENT_ID)
+            .addQueryParameter("f", "json")
+            .addQueryParameter("id", songId)
+
         if (!format.isNullOrBlank()) {
             urlBuilder.addQueryParameter("format", format)
         }

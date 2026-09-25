@@ -263,6 +263,11 @@ interface StreamingMusicRepository : MusicRepository {
     suspend fun reportPlaybackStop(songId: String, positionMs: Long): Boolean
 
     /**
+     * Report playback progress (scrobbling/now playing progress).
+     */
+    suspend fun reportPlaybackProgress(songId: String, positionMs: Long, isPaused: Boolean = false): Boolean = false
+
+    /**
      * Get lyrics for a song from the active streaming service.
      */
     suspend fun getLyrics(songId: String, artist: String? = null, title: String? = null): LyricsData?

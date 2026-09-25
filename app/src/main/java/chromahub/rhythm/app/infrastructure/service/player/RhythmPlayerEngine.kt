@@ -24,6 +24,9 @@ import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import chromahub.rhythm.app.features.streaming.data.provider.UserTrustManager
+import java.util.concurrent.TimeUnit
 import android.os.Build
 import androidx.media3.common.TrackSelectionParameters
 import chromahub.rhythm.app.shared.data.model.AppSettings
@@ -341,7 +344,12 @@ class RhythmPlayerEngine(
             .setUsage(C.USAGE_MEDIA)
             .build()
 
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        val okHttpClient = UserTrustManager.buildUserTrustingHttpClientBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+        val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+            .setUserAgent("Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
         val cacheDataSourceFactory = CacheDataSource.Factory()
             .setCache(AudioCacheManager.getCache(context))
             .setUpstreamDataSourceFactory(httpDataSourceFactory)
@@ -360,7 +368,10 @@ class RhythmPlayerEngine(
                             // Run blocking is safe here as ExoPlayer calls resolveDataSpec on a background thread
                             val freshUrl = runBlocking { repository.getStreamingUrl(trackId) }
                             if (!freshUrl.isNullOrBlank()) {
-                                return dataSpec.withUri((freshUrl).toUri())
+                                return dataSpec.buildUpon()
+                                    .setUri((freshUrl).toUri())
+                                    .setKey("streaming_$trackId")
+                                    .build()
                             }
                         }
                     }

@@ -672,7 +672,7 @@ private fun normalizeStreamingQuality(rawValue: String): String {
     return if (streamingQualityOptions.any { it.value == normalized }) normalized else "HIGH"
 }
 
-private fun streamingQualityLabel(quality: String, context: Context): String {
+internal fun streamingQualityLabel(quality: String, context: Context): String {
     return when (normalizeStreamingQuality(quality)) {
         "LOW" -> context.getString(R.string.streaming_quality_low)
         "NORMAL" -> context.getString(R.string.streaming_quality_normal)
@@ -704,13 +704,13 @@ private fun formatListeningDurationShort(durationMs: Long): String {
     }
 }
 
-private data class StreamingQualityOption(
+internal data class StreamingQualityOption(
     val value: String,
     @param:StringRes val titleRes: Int,
     @param:StringRes val descriptionRes: Int
 )
 
-private val streamingQualityOptions = listOf(
+internal val streamingQualityOptions = listOf(
     StreamingQualityOption(
         value = "LOW",
         titleRes = R.string.streaming_quality_low,

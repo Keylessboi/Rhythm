@@ -991,7 +991,10 @@ private fun StreamingHomeBody(
                 title = errorMessage,
                 subtitle = context.getString(R.string.streaming_home_widget_empty_hint),
                 actionText = context.getString(R.string.streaming_service_setup_reconnect),
-                onAction = { onConfigureService(serviceName) }
+                onAction = {
+                    vm?.clearError()
+                    onConfigureService(serviceName)
+                }
             )
         }
 

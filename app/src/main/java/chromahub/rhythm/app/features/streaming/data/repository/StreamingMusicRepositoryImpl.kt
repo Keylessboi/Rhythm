@@ -177,9 +177,47 @@ class StreamingMusicRepositoryImpl(
         }
     }
 
-    private fun getDownloadFile(songId: String): java.io.File {
+    private val audioExtensions = listOf(".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".wma", ".webm")
+
+    fun getDownloadFile(songId: String, extension: String = ".mp3"): java.io.File {
         val safeName = songId.replace(":", "_").replace("/", "_").replace("\\", "_")
-        return java.io.File(downloadDirectory, "$safeName.mp3")
+        val ext = if (extension.startsWith(".")) extension else ".$extension"
+        val exactFile = java.io.File(downloadDirectory, "$safeName$ext")
+        if (exactFile.exists() && exactFile.length() > 0) return exactFile
+
+        for (candidateExt in audioExtensions) {
+            val candidate = java.io.File(downloadDirectory, "$safeName$candidateExt")
+            if (candidate.exists() && candidate.length() > 0) {
+                return candidate
+            }
+        }
+        return exactFile
+    }
+
+    private fun extractExtension(contentDisposition: String?, contentType: String?): String {
+        if (!contentDisposition.isNullOrBlank()) {
+            val filenameMatch = Regex("""filename\*?=['"]?(?:UTF-\d['"]*)?([^'";\n]+)['"]?""", RegexOption.IGNORE_CASE)
+                .find(contentDisposition)
+            val filename = filenameMatch?.groupValues?.get(1)?.trim()
+            if (!filename.isNullOrBlank() && filename.contains(".")) {
+                val ext = "." + filename.substringAfterLast(".").lowercase()
+                if (ext in audioExtensions) return ext
+            }
+        }
+        if (!contentType.isNullOrBlank()) {
+            val mime = contentType.substringBefore(";").trim().lowercase()
+            return when (mime) {
+                "audio/flac", "audio/x-flac" -> ".flac"
+                "audio/mp4", "audio/x-m4a", "audio/m4a", "audio/aac", "audio/x-aac" -> ".m4a"
+                "audio/ogg", "audio/vorbis", "application/ogg" -> ".ogg"
+                "audio/opus" -> ".opus"
+                "audio/wav", "audio/x-wav", "audio/wave" -> ".wav"
+                "audio/webm" -> ".webm"
+                "audio/mpeg", "audio/mp3" -> ".mp3"
+                else -> ".mp3"
+            }
+        }
+        return ".mp3"
     }
 
     fun getCatalogCacheFile(serviceId: String): java.io.File {
@@ -749,6 +787,18 @@ class StreamingMusicRepositoryImpl(
         }
     }
 
+    override suspend fun reportPlaybackProgress(songId: String, positionMs: Long, isPaused: Boolean): Boolean {
+        val decoded = decodeSongId(songId) ?: return false
+        val (serviceId, providerId) = decoded
+        if (!isServiceConnected(serviceId)) return false
+
+        return when (serviceId) {
+            StreamingServiceId.JELLYFIN -> jellyfinClient.reportPlaybackProgress(providerId, positionMs * 10_000L, isPaused).isSuccess
+            StreamingServiceId.SUBSONIC -> subsonicClient.reportPlaybackProgress(providerId, positionMs, isPaused).isSuccess
+            else -> false
+        }
+    }
+
     /**
      * Invalidate cached streaming URL for a specific song.
      */
@@ -992,34 +1042,66 @@ class StreamingMusicRepositoryImpl(
         
         val (serviceId, providerId) = decodeSongId(songId) ?: return@withContext false
         
-        // 1. Resolve stream URL directly bypassing any temporary offline modes or network checks specifically for the download.
         val bitrate = desiredBitrateKbps()
-        val streamUrl = when (serviceId) {
+        val primaryDownloadUrl = when (serviceId) {
+            StreamingServiceId.SUBSONIC -> subsonicClient.buildDownloadUrl(providerId, format = "raw")
+            StreamingServiceId.JELLYFIN -> jellyfinClient.buildDownloadUrl(providerId)
+            else -> null
+        }
+        val fallbackStreamUrl = when (serviceId) {
             StreamingServiceId.SUBSONIC -> subsonicClient.buildStreamUrl(providerId, bitrate)
             StreamingServiceId.JELLYFIN -> jellyfinClient.buildStreamUrl(providerId, bitrate)
             else -> null
-        } ?: return@withContext false
+        }
+        val targetUrl = primaryDownloadUrl ?: fallbackStreamUrl ?: return@withContext false
 
-        // 2. Fetch the song object to save its metadata
-        val song = songCache[songId]
+        var song = songCache[songId]
             ?: songsFlow.value.filterIsInstance<StreamingSong>().firstOrNull { it.id == songId }
             ?: likedSongsFlow.value.firstOrNull { it.id == songId }
             ?: downloadedSongsMap[songId]
-            ?: return@withContext false
 
-        // 3. Download the file using OkHttpClient with support for user-trusted and self-signed CAs
+        if (song == null) {
+            song = (getSongById(songId) as? StreamingSong)
+        }
+        val finalSong = song ?: return@withContext false
+
         val client = UserTrustManager.buildUserTrustingHttpClientBuilder()
             .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
             .build()
-        val request = okhttp3.Request.Builder().url(streamUrl).build()
-        
-        val file = getDownloadFile(songId)
+
+        fun buildRequest(url: String): okhttp3.Request {
+            val reqBuilder = okhttp3.Request.Builder()
+                .url(url)
+                .header("User-Agent", "Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
+            if (serviceId == StreamingServiceId.JELLYFIN) {
+                jellyfinClient.getAccessToken()?.let { token ->
+                    reqBuilder.header("Authorization", "MediaBrowser Client=\"Rhythm\", Device=\"Rhythm Android\", DeviceId=\"rhythm-android-client\", Version=\"${chromahub.rhythm.app.BuildConfig.VERSION_NAME}\", Token=\"$token\"")
+                    reqBuilder.header("X-Emby-Token", token)
+                }
+            }
+            return reqBuilder.build()
+        }
+
+        var downloadedFile: java.io.File? = null
         try {
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext false
-                val body = response.body
-                
+            var response = client.newCall(buildRequest(targetUrl)).execute()
+            if (!response.isSuccessful && primaryDownloadUrl != null && fallbackStreamUrl != null && targetUrl != fallbackStreamUrl) {
+                response.close()
+                response = client.newCall(buildRequest(fallbackStreamUrl)).execute()
+            }
+
+            if (!response.isSuccessful) {
+                response.close()
+                return@withContext false
+            }
+
+            val ext = extractExtension(response.header("Content-Disposition"), response.header("Content-Type"))
+            val file = getDownloadFile(songId, ext)
+            downloadedFile = file
+
+            response.use { resp ->
+                val body = resp.body
                 body.byteStream().use { inputStream ->
                     file.outputStream().use { outputStream ->
                         inputStream.copyTo(outputStream)
@@ -1029,9 +1111,9 @@ class StreamingMusicRepositoryImpl(
             
             // 4. Download and cache the artwork if present and not a local file
             var localArtworkPath: String? = null
-            var artworkUri = song.artworkUri
+            var artworkUri = finalSong.artworkUri
             if (artworkUri.isNullOrBlank()) {
-                val albumProviderId = song.albumId?.let { decodeSongId(it)?.second }
+                val albumProviderId = finalSong.albumId?.let { decodeSongId(it)?.second }
                 artworkUri = when (serviceId) {
                     StreamingServiceId.SUBSONIC -> subsonicClient.buildCoverArtUrl(albumProviderId ?: providerId)
                     StreamingServiceId.JELLYFIN -> jellyfinClient.buildImageUrl(albumProviderId ?: providerId)
@@ -1040,7 +1122,7 @@ class StreamingMusicRepositoryImpl(
             }
 
             val safeSongId = songId.replace(":", "_").replace("/", "_").replace("\\", "_")
-            val safeAlbumKey = (song.albumId ?: "${song.artist}_${song.album}")
+            val safeAlbumKey = (finalSong.albumId ?: "${finalSong.artist}_${finalSong.album}")
                 .replace(":", "_").replace("/", "_").replace("\\", "_").replace(" ", "_").lowercase()
             val albumArtFile = java.io.File(downloadDirectory, "${safeAlbumKey}_album_art.jpg")
             val songArtFile = java.io.File(downloadDirectory, "${safeSongId}_art.jpg")
@@ -1050,11 +1132,14 @@ class StreamingMusicRepositoryImpl(
             } else if (songArtFile.exists() && songArtFile.length() > 0) {
                 localArtworkPath = Uri.fromFile(songArtFile).toString()
             } else if (!artworkUri.isNullOrBlank() && (artworkUri.startsWith("http://") || artworkUri.startsWith("https://"))) {
-                val artRequest = okhttp3.Request.Builder().url(artworkUri).build()
+                val artRequest = okhttp3.Request.Builder()
+                    .url(artworkUri)
+                    .header("User-Agent", "Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
+                    .build()
                 try {
-                    client.newCall(artRequest).execute().use { response ->
-                        if (response.isSuccessful) {
-                            response.body.byteStream().use { artInput ->
+                    client.newCall(artRequest).execute().use { responseArt ->
+                        if (responseArt.isSuccessful) {
+                            responseArt.body.byteStream().use { artInput ->
                                 albumArtFile.outputStream().use { artOutput ->
                                     artInput.copyTo(artOutput)
                                 }
@@ -1071,7 +1156,7 @@ class StreamingMusicRepositoryImpl(
 
             if (localArtworkPath == null) {
                 val existingLocalArt = downloadedSongsMap.values.firstOrNull {
-                    (it.albumId == song.albumId || it.album.equals(song.album, ignoreCase = true)) &&
+                    (it.albumId == finalSong.albumId || it.album.equals(finalSong.album, ignoreCase = true)) &&
                     it.artworkUri?.startsWith("file:") == true
                 }?.artworkUri
                 if (existingLocalArt != null) {
@@ -1081,9 +1166,9 @@ class StreamingMusicRepositoryImpl(
 
             // 5. Update metadata index
             val localSongUrl = Uri.fromFile(file).toString()
-            val downloadedSong = song.copy(
+            val downloadedSong = finalSong.copy(
                 streamingUrl = localSongUrl,
-                artworkUri = localArtworkPath ?: song.artworkUri
+                artworkUri = localArtworkPath ?: finalSong.artworkUri
             )
             
             downloadedSongsMap[songId] = downloadedSong
@@ -1091,9 +1176,7 @@ class StreamingMusicRepositoryImpl(
             true
         } catch (e: Exception) {
             Log.e("StreamingMusicRepo", "Error downloading song $songId", e)
-            if (file.exists()) {
-                file.delete()
-            }
+            downloadedFile?.let { if (it.exists()) it.delete() }
             false
         }
     }
@@ -1101,9 +1184,16 @@ class StreamingMusicRepositoryImpl(
     override suspend fun removeDownload(songId: String): Boolean = withContext(Dispatchers.IO) {
         val file = getDownloadFile(songId)
         val deletedFile = if (file.exists()) file.delete() else true
+
+        val safeSongId = songId.replace(":", "_").replace("/", "_").replace("\\", "_")
+        for (candidateExt in audioExtensions) {
+            val candidate = java.io.File(downloadDirectory, "$safeSongId$candidateExt")
+            if (candidate.exists()) {
+                candidate.delete()
+            }
+        }
         
         // Delete song specific artwork if exists
-        val safeSongId = songId.replace(":", "_").replace("/", "_").replace("\\", "_")
         val songArtFile = java.io.File(downloadDirectory, "${safeSongId}_art.jpg")
         if (songArtFile.exists()) {
             songArtFile.delete()

@@ -56,6 +56,7 @@ class JellyfinApiClient(context: Context) {
     fun getServerUrl(): String = credentials?.serverUrl.orEmpty()
 
     fun getUsername(): String = credentials?.username.orEmpty()
+    fun getAccessToken(): String? = credentials?.accessToken
 
     /**
      * Generates sensible candidate URLs from user input to test for Jellyfin server reachability.
@@ -707,13 +708,19 @@ class JellyfinApiClient(context: Context) {
         ).map { true }
     }
 
-    suspend fun reportPlaybackStart(itemId: String): Result<Boolean> {
+    suspend fun reportPlaybackStart(
+        itemId: String,
+        playSessionId: String? = null
+    ): Result<Boolean> {
         credentials ?: return Result.failure(IllegalStateException("Jellyfin service is not connected"))
         if (itemId.isBlank()) return Result.failure(IllegalArgumentException("Item id is required"))
 
         val bodyJson = JSONObject().apply {
             put("ItemId", itemId)
-            put("PlayMethod", "DirectStream") // We use direct stream, not transcoding typically
+            put("PlayMethod", "DirectStream")
+            if (!playSessionId.isNullOrBlank()) {
+                put("PlaySessionId", playSessionId)
+            }
         }
 
         return request(
@@ -723,7 +730,37 @@ class JellyfinApiClient(context: Context) {
         ).map { true }
     }
 
-    suspend fun reportPlaybackStop(itemId: String, positionTicks: Long): Result<Boolean> {
+    suspend fun reportPlaybackProgress(
+        itemId: String,
+        positionTicks: Long,
+        isPaused: Boolean = false,
+        playSessionId: String? = null
+    ): Result<Boolean> {
+        credentials ?: return Result.failure(IllegalStateException("Jellyfin service is not connected"))
+        if (itemId.isBlank()) return Result.failure(IllegalArgumentException("Item id is required"))
+
+        val bodyJson = JSONObject().apply {
+            put("ItemId", itemId)
+            put("PositionTicks", positionTicks)
+            put("IsPaused", isPaused)
+            put("PlayMethod", "DirectStream")
+            if (!playSessionId.isNullOrBlank()) {
+                put("PlaySessionId", playSessionId)
+            }
+        }
+
+        return request(
+            path = "/Sessions/Playing/Progress",
+            method = "POST",
+            body = bodyJson.toString().toRequestBody("application/json".toMediaType())
+        ).map { true }
+    }
+
+    suspend fun reportPlaybackStop(
+        itemId: String,
+        positionTicks: Long,
+        playSessionId: String? = null
+    ): Result<Boolean> {
         credentials ?: return Result.failure(IllegalStateException("Jellyfin service is not connected"))
         if (itemId.isBlank()) return Result.failure(IllegalArgumentException("Item id is required"))
 
@@ -731,6 +768,9 @@ class JellyfinApiClient(context: Context) {
             put("ItemId", itemId)
             put("PositionTicks", positionTicks)
             put("PlayMethod", "DirectStream")
+            if (!playSessionId.isNullOrBlank()) {
+                put("PlaySessionId", playSessionId)
+            }
         }
 
         return request(
@@ -822,28 +862,46 @@ class JellyfinApiClient(context: Context) {
         return String.format(java.util.Locale.US, "[%02d:%02d.%02d]", minutes, seconds, hundredths)
     }
 
-    fun buildStreamUrl(itemId: String, maxBitRateKbps: Int = 0): String? {
+    fun buildStreamUrl(
+        itemId: String,
+        maxBitRateKbps: Int = 0,
+        playSessionId: String? = null
+    ): String? {
         val cred = credentials ?: return null
         if (itemId.isBlank()) return null
 
         val urlBuilder = "${cred.serverUrl}/Audio/$itemId/universal".toHttpUrl().newBuilder()
             .addQueryParameter("UserId", cred.userId)
             .addQueryParameter("DeviceId", DEVICE_ID)
-            .addQueryParameter("Container", "mp3,flac,m4a,ogg,wav,aac,opus,webm")
-            .addQueryParameter("AudioCodec", "mp3,flac,aac,opus")
+            .addQueryParameter("Container", "mp3,flac,m4a,aac,ogg,oga,wav,wma,opus,webm,alac")
+            .addQueryParameter("TranscodingContainer", "mp3")
+            .addQueryParameter("AudioCodec", "mp3")
+            .addQueryParameter("EnableAutoStreamCopy", "true")
+            .addQueryParameter("AllowAudioStreamCopy", "true")
+            .addQueryParameter("EnableRedirection", "true")
+            .addQueryParameter("ApiKey", cred.accessToken)
             .addQueryParameter("api_key", cred.accessToken)
 
         if (maxBitRateKbps > 0) {
             urlBuilder.addQueryParameter("MaxStreamingBitrate", (maxBitRateKbps * 1000).toString())
         }
+        if (!playSessionId.isNullOrBlank()) {
+            urlBuilder.addQueryParameter("PlaySessionId", playSessionId)
+        }
 
         return urlBuilder.build().toString()
+    }
+
+    fun buildDownloadUrl(itemId: String): String? {
+        val cred = credentials ?: return null
+        if (itemId.isBlank()) return null
+        return "${cred.serverUrl}/Items/$itemId/Download?ApiKey=${cred.accessToken}&api_key=${cred.accessToken}"
     }
 
     fun buildImageUrl(itemId: String, maxWidth: Int = 500): String? {
         val cred = credentials ?: return null
         if (itemId.isBlank()) return null
-        return "${cred.serverUrl}/Items/$itemId/Images/Primary?maxWidth=$maxWidth&quality=90&api_key=${cred.accessToken}"
+        return "${cred.serverUrl}/Items/$itemId/Images/Primary?maxWidth=$maxWidth&quality=90&ApiKey=${cred.accessToken}&api_key=${cred.accessToken}"
     }
 
     private suspend fun authenticateByName(
@@ -861,6 +919,7 @@ class JellyfinApiClient(context: Context) {
                 val request = Request.Builder()
                     .url("${serverUrl.trimEnd('/')}/Users/AuthenticateByName")
                     .header("Authorization", buildAuthorizationHeader(token = null))
+                    .header("User-Agent", "Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
                     .header("Content-Type", "application/json")
                     .post(body)
                     .build()
@@ -906,6 +965,8 @@ class JellyfinApiClient(context: Context) {
                 val requestBuilder = Request.Builder()
                     .url(urlBuilder.build())
                     .header("Authorization", buildAuthorizationHeader(token = cred.accessToken))
+                    .header("X-Emby-Token", cred.accessToken)
+                    .header("User-Agent", "Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)")
                     .header("Accept", "application/json")
                 when (method.uppercase()) {
                     "POST" -> requestBuilder.post(body ?: "".toRequestBody("text/plain".toMediaType()))

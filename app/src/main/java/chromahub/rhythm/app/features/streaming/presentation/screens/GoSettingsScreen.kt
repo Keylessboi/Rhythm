@@ -56,8 +56,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import chromahub.rhythm.app.features.streaming.presentation.model.StreamingServiceOptions
-import chromahub.rhythm.app.util.AppRestarter
-import chromahub.rhythm.app.shared.presentation.components.dialogs.AppRestartDialog
 import chromahub.rhythm.app.core.utils.NetworkUtils
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.StandardBottomSheetHeader
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,8 +120,6 @@ fun GoSettingsScreen(
 
     var showServiceSheet by remember { mutableStateOf(false) }
     var showQualitySheet by remember { mutableStateOf(false) }
-    var showRestartDialog by remember { mutableStateOf(false) }
-    var restartDialogMessage by remember { mutableStateOf("") }
     var pendingServiceSelection by remember { mutableStateOf<String?>(null) }
 
     CollapsibleHeaderScreen(
@@ -215,7 +211,7 @@ fun GoSettingsScreen(
                         Material3SettingsItem(
                             icon = MaterialSymbolIcon("high_quality"),
                             title = { Text(text = stringResource(R.string.streaming_settings_quality)) },
-                            description = { Text(text = streamingQuality) },
+                            description = { Text(text = streamingQualityLabel(streamingQuality, context)) },
                             onClick = { showQualitySheet = true }
                         )
                     )
@@ -331,27 +327,15 @@ fun GoSettingsScreen(
         )
     }
 
-            if (showQualitySheet) {
+    if (showQualitySheet) {
         QualitySelectionBottomSheet(
             selectedQuality = streamingQuality.uppercase(),
             onDismiss = { showQualitySheet = false },
             onSelect = { quality ->
-                HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
+                HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
                 viewModel.setStreamingQuality(StreamingQuality.valueOf(quality))
-                // Show restart dialog consistent with other settings that require app restart
-                restartDialogMessage = "Streaming quality changed. Restart the app to apply the new audio settings."
-                showRestartDialog = true
                 showQualitySheet = false
             }
-        )
-    }
-
-    if (showRestartDialog) {
-        AppRestartDialog(
-            onDismiss = { showRestartDialog = false },
-            onRestart = { AppRestarter.restartApp(context) },
-            onContinue = { /* continue without restart */ },
-            message = restartDialogMessage
         )
     }
 }
@@ -639,15 +623,8 @@ private fun QualitySelectionBottomSheet(
                     .padding(start = 24.dp, end = 24.dp + endPadding, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val streamingQualityOptions = listOf(
-                    Pair("LOW", R.string.streaming_quality_low),
-                    Pair("NORMAL", R.string.streaming_quality_normal),
-                    Pair("HIGH", R.string.streaming_quality_high),
-                    Pair("LOSSLESS", R.string.streaming_quality_lossless)
-                )
-
                 streamingQualityOptions.forEachIndexed { index, option ->
-                    val isSelected = selectedQuality == option.first
+                    val isSelected = selectedQuality == option.value
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -659,7 +636,7 @@ private fun QualitySelectionBottomSheet(
                                 MaterialTheme.colorScheme.surfaceContainerHigh
                             }
                         ),
-                        onClick = { onSelect(option.first) }
+                        onClick = { onSelect(option.value) }
                     ) {
                         Row(
                             modifier = Modifier
@@ -681,7 +658,7 @@ private fun QualitySelectionBottomSheet(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(id = option.second),
+                                    text = stringResource(id = option.titleRes),
                                     style = MaterialTheme.typography.bodyLarge,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,

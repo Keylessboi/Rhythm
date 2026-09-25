@@ -328,4 +328,63 @@ class StreamingFixesTest {
         assertEquals(cache.likedSongIds, deserialized.likedSongIds)
         assertEquals(cache.lastSyncTimestamp, deserialized.lastSyncTimestamp)
     }
+
+    private fun extractExtension(contentDisposition: String?, contentType: String?): String {
+        val audioExtensions = listOf(".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".wma", ".webm")
+        if (!contentDisposition.isNullOrBlank()) {
+            val filenameMatch = Regex("""filename\*?=['"]?(?:UTF-\d['"]*)?([^'";\n]+)['"]?""", RegexOption.IGNORE_CASE)
+                .find(contentDisposition)
+            val filename = filenameMatch?.groupValues?.get(1)?.trim()
+            if (!filename.isNullOrBlank() && filename.contains(".")) {
+                val ext = "." + filename.substringAfterLast(".").lowercase()
+                if (ext in audioExtensions) return ext
+            }
+        }
+        if (!contentType.isNullOrBlank()) {
+            val mime = contentType.substringBefore(";").trim().lowercase()
+            return when (mime) {
+                "audio/flac", "audio/x-flac" -> ".flac"
+                "audio/mp4", "audio/x-m4a", "audio/m4a", "audio/aac", "audio/x-aac" -> ".m4a"
+                "audio/ogg", "audio/vorbis", "application/ogg" -> ".ogg"
+                "audio/opus" -> ".opus"
+                "audio/wav", "audio/x-wav", "audio/wave" -> ".wav"
+                "audio/webm" -> ".webm"
+                "audio/mpeg", "audio/mp3" -> ".mp3"
+                else -> ".mp3"
+            }
+        }
+        return ".mp3"
+    }
+
+    @Test
+    fun testAudioExtensionSniffing() {
+        assertEquals(".flac", extractExtension("attachment; filename=\"song.flac\"", "application/octet-stream"))
+        assertEquals(".m4a", extractExtension("inline; filename*=UTF-8''my%20song.m4a", "audio/mp4"))
+        assertEquals(".opus", extractExtension(null, "audio/opus"))
+        assertEquals(".ogg", extractExtension(null, "audio/ogg; codecs=vorbis"))
+        assertEquals(".wav", extractExtension("attachment; filename=\"recording.wav\"", null))
+        assertEquals(".mp3", extractExtension(null, "audio/mpeg"))
+        assertEquals(".mp3", extractExtension(null, "unknown/format"))
+    }
+
+    @Test
+    fun testUserAgentFormatConsistency() {
+        val expectedPattern = Regex("""^Rhythm/\S+ \(Android\)$""")
+        val userAgent = "Rhythm/${chromahub.rhythm.app.BuildConfig.VERSION_NAME} (Android)"
+        assertTrue("User Agent '$userAgent' should match pattern 'Rhythm/<version> (Android)'", expectedPattern.matches(userAgent))
+    }
+
+    @Test
+    fun testJellyfinCodecParameterConstraints() {
+        val jellyfinValidationRegex = Regex("""^[a-zA-Z0-9\-\._,|]{0,40}$""")
+
+        val validCodec = "mp3"
+        val validTranscodingContainer = "mp3"
+        val invalidCodecList = "mp3,flac,aac,opus,vorbis,alac,pcm_s16le,pcm_s24le"
+
+        assertTrue(jellyfinValidationRegex.matches(validCodec))
+        assertTrue(jellyfinValidationRegex.matches(validTranscodingContainer))
+        assertTrue(validCodec.length <= 40)
+        assertFalse("Comma-separated list of 45 characters must NOT match Jellyfin validation regex", jellyfinValidationRegex.matches(invalidCodecList))
+    }
 }

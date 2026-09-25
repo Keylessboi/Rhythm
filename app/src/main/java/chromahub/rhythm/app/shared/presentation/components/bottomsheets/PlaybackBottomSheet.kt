@@ -107,9 +107,12 @@ import androidx.compose.ui.res.stringResource
 import chromahub.rhythm.app.shared.presentation.components.Material3SettingsGroup
 import chromahub.rhythm.app.shared.presentation.components.Material3SettingsItem
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShape
-import chromahub.rhythm.app.shared.presentation.components.dialogs.AppRestartDialog
-import chromahub.rhythm.app.util.AppRestarter
-import chromahub.rhythm.app.core.domain.model.StreamingQuality
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import chromahub.rhythm.app.shared.presentation.components.bottomsheets.AdaptiveSheetScrollContainer
+import chromahub.rhythm.app.shared.presentation.components.bottomsheets.groupedBottomSheetItemShape
+import chromahub.rhythm.app.features.streaming.presentation.screens.streamingQualityOptions
+import chromahub.rhythm.app.features.streaming.presentation.screens.streamingQualityLabel
 import chromahub.rhythm.app.shared.presentation.components.player.VolumeSlider
 import java.util.Locale
 
@@ -166,10 +169,7 @@ fun PlaybackBottomSheet(
     
     var showSpeedPitchSheet by remember { mutableStateOf(false) }
 
-    // Quality sheet and restart dialog state
     var showQualitySheet by remember { mutableStateOf(false) }
-    var showRestartDialog by remember { mutableStateOf(false) }
-    var restartDialogMessage by remember { mutableStateOf("") }
 
     // Initialize system volume and monitor for changes
     LaunchedEffect(Unit) {
@@ -385,23 +385,10 @@ fun PlaybackBottomSheet(
             selectedQuality = streamingQuality.uppercase(),
             onDismiss = { showQualitySheet = false },
             onSelect = { quality ->
-                HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
+                HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
                 appSettings.setStreamingQuality(quality)
-                // Show restart dialog
-                restartDialogMessage = "Streaming quality changed. Restart the app to apply the new audio settings."
-                showRestartDialog = true
                 showQualitySheet = false
             }
-        )
-    }
-
-    // Restart dialog
-    if (showRestartDialog) {
-        AppRestartDialog(
-            onDismiss = { showRestartDialog = false },
-            onRestart = { AppRestarter.restartApp(context) },
-            onContinue = { /* continue without restart */ },
-            message = restartDialogMessage
         )
     }
 
@@ -1074,7 +1061,7 @@ private fun StreamingQualityCard(
                 Material3SettingsItem(
                     icon = MaterialSymbolIcon("high_quality", filled = true),
                     title = { Text(text = context.getString(R.string.streaming_settings_quality)) },
-                    description = { Text(text = selectedQuality) },
+                    description = { Text(text = streamingQualityLabel(selectedQuality, context)) },
                     trailingContent = {
                         Icon(
                             imageVector = RhythmIcons.Forward,
@@ -1557,6 +1544,7 @@ private fun QualitySelectionBottomSheet(
     onSelect: (String) -> Unit
 ) {
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+    val scrollState = rememberScrollState()
 
     RhythmAdaptiveModalSheet(
         adaptiveType = SheetAdaptiveType.WIDE_DIALOG,
@@ -1572,85 +1560,77 @@ private fun QualitySelectionBottomSheet(
             subtitle = stringResource(id = chromahub.rhythm.app.R.string.streaming_settings_quality_sheet_desc),
             visible = true
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp)
-        ) {
+        AdaptiveSheetScrollContainer(
+            scrollState = scrollState,
+            modifier = Modifier.fillMaxWidth()
+        ) { endPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+                    .padding(start = 24.dp, end = 24.dp + endPadding, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                streamingQualityOptions.forEachIndexed { index, option ->
+                    val isSelected = selectedQuality == option.value
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val streamingQualityOptions = listOf(
-                Pair("LOW", chromahub.rhythm.app.R.string.streaming_quality_low),
-                Pair("NORMAL", chromahub.rhythm.app.R.string.streaming_quality_normal),
-                Pair("HIGH", chromahub.rhythm.app.R.string.streaming_quality_high),
-                Pair("LOSSLESS", chromahub.rhythm.app.R.string.streaming_quality_lossless)
-            )
-
-            streamingQualityOptions.forEach { option ->
-                val isSelected = selectedQuality == option.first
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        }
-                    ),
-                    onClick = { onSelect(option.first) }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = MaterialSymbolIcon("high_quality"),
-                            contentDescription = null,
-                            tint = if (isSelected) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = groupedBottomSheetItemShape(index, streamingQualityOptions.size),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.size(24.dp)
-                        )
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(id = option.second),
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isSelected) {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            }
+                        ),
+                        onClick = { onSelect(option.value) }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = MaterialSymbolIcon("high_quality"),
+                                contentDescription = null,
+                                tint = if (isSelected) {
                                     MaterialTheme.colorScheme.onPrimaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.size(if (isSelected) 30.dp else 26.dp)
                             )
-                        }
 
-                        if (isSelected) {
-                            Icon(
-                                imageVector = RhythmIcons.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(id = option.titleRes),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
+
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = RhythmIcons.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

@@ -76,6 +76,18 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
     private val authMutex = Mutex()
     private var lastSuccessfulAuthTimestamp = 0L
 
+    fun showToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
+        viewModelScope.launch(Dispatchers.Main) {
+            Toast.makeText(getApplication(), message, duration).show()
+        }
+    }
+
+    fun showToast(resId: Int, duration: Int = Toast.LENGTH_SHORT) {
+        viewModelScope.launch(Dispatchers.Main) {
+            Toast.makeText(getApplication(), resId, duration).show()
+        }
+    }
+
     private fun showStatusToast(resId: Int) {
         if (appSettings.appMode.value != "STREAMING") return
         viewModelScope.launch(Dispatchers.Main) {
@@ -368,6 +380,21 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     }
                 } else {
                     notificationManager.cancelSyncNotification()
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            appSettings.streamingQuality.drop(1).collect { qualityName ->
+                val quality = try {
+                    StreamingQuality.valueOf(qualityName.uppercase())
+                } catch (_: Exception) {
+                    StreamingQuality.HIGH
+                }
+                if (_streamingConfig.value.streamingQuality != quality) {
+                    _streamingConfig.value = _streamingConfig.value.copy(streamingQuality = quality)
+                    refreshCurrentSession()
+                    refreshCurrentPlaybackQueue()
                 }
             }
         }
@@ -980,20 +1007,20 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
             try {
                 if (!checkAndSyncAuthentication()) {
                     _searchResults.value = StreamingSearchResults()
-                    _error.value = "Connect to a streaming service first"
+                    showToast("Connect to a streaming service first")
                     return@launch
                 }
                 
                 // Check network and offline constraints
                 if (!NetworkUtils.canStream(getApplication(), appSettings.allowCellularStreaming.value)) {
                     _searchResults.value = StreamingSearchResults()
-                    _error.value = "Streaming not allowed on current network"
+                    showToast("Streaming not allowed on current network")
                     return@launch
                 }
                 
                 if (appSettings.offlineMode.value) {
                     _searchResults.value = StreamingSearchResults()
-                    _error.value = "Search not available in offline mode"
+                    showToast("Search not available in offline mode")
                     return@launch
                 }
 
@@ -1009,7 +1036,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     playlists = playlists
                 )
             } catch (e: Exception) {
-                _error.value = "Search failed: ${e.message}"
+                showToast("Search failed: ${e.message}")
             } finally {
                 _isLoading.value = false
             }
@@ -1048,7 +1075,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
     fun playQueue(queue: List<StreamingSong>, startIndex: Int = 0, shuffle: Boolean = false, pinStartIndex: Boolean = false) {
         val playableQueue = queue.filter { it.isPlayable }
         if (playableQueue.isEmpty()) {
-            _error.value = "No playable tracks available"
+            showToast("No playable tracks available")
             return
         }
 
@@ -1059,7 +1086,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
 
             val isOffline = !_isOnline.value || !NetworkUtils.isNetworkAvailable(getApplication()) || appSettings.offlineMode.value
             if (isOffline && !isTargetDownloaded) {
-                _error.value = if (appSettings.offlineMode.value) "Offline mode: Song is not downloaded" else "Device is offline: Song is not downloaded"
+                showToast(if (appSettings.offlineMode.value) "Offline mode: Song is not downloaded" else "Device is offline: Song is not downloaded")
                 return@launch
             }
 
@@ -1068,7 +1095,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
             val credentialsExist = providerRepository?.isServiceConnected(normalizedServiceId) ?: sessionMarkedConnected
 
             if (!credentialsExist && !isTargetDownloaded && _downloadedSongs.value.isEmpty()) {
-                _error.value = "Connect to a streaming service first"
+                showToast("Connect to a streaming service first")
                 return@launch
             }
             val shouldPinStart = pinStartIndex || (shuffle && safeStartIndex > 0)
@@ -1113,11 +1140,12 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
 
             val selectedResolvedSong = queueWithResolvedSongs[selectedIndex]
             if (selectedResolvedSong.streamingUrl.isNullOrBlank()) {
-                _error.value = when {
+                val errorMsg = when {
                     appSettings.offlineMode.value -> "Offline mode: Song not in cache"
                     !NetworkUtils.canStream(getApplication(), appSettings.allowCellularStreaming.value) -> "Streaming not allowed on current network"
                     else -> "Unable to resolve stream URL for this song"
                 }
+                showToast(errorMsg)
                 return@launch
             }
 
@@ -1412,7 +1440,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 _likedSongs.value = repository.getLikedSongs().first()
                 notificationManager.notifyLikeSong(getSourceTypeName(_currentService.value))
             } catch (e: Exception) {
-                _error.value = "Failed to save song: ${e.message}"
+                showToast("Failed to save song: ${e.message}")
             }
         }
     }
@@ -1427,7 +1455,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 _likedSongs.value = repository.getLikedSongs().first()
                 notificationManager.notifyUnlikeSong(getSourceTypeName(_currentService.value))
             } catch (e: Exception) {
-                _error.value = "Failed to remove song: ${e.message}"
+                showToast("Failed to remove song: ${e.message}")
             }
         }
     }
@@ -1442,7 +1470,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 _likedSongs.value = repository.getLikedSongs().first()
                 notificationManager.notifyLikeSong(getSourceTypeName(_currentService.value))
             } catch (e: Exception) {
-                _error.value = "Failed to save song: ${e.message}"
+                showToast("Failed to save song: ${e.message}")
             }
         }
     }
@@ -1452,12 +1480,13 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
      */
     fun downloadSong(song: StreamingSong) {
         if (!_isOnline.value || !NetworkUtils.isNetworkAvailable(getApplication()) || appSettings.offlineMode.value) {
-            _error.value = "Cannot download while offline"
+            showToast("Cannot download while offline")
             return
         }
         viewModelScope.launch {
             if (_downloadingSongIds.value.contains(song.id)) return@launch
             _downloadingSongIds.value = _downloadingSongIds.value + song.id
+            showToast("Downloading ${song.title}...")
             try {
                 val success = repository.downloadSong(song)
                 if (success) {
@@ -1465,14 +1494,15 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     _downloadedSongs.value = downloaded
                     _downloadedAlbums.value = deriveAlbumsFromSongs(downloaded, limit = 500)
                     _downloadedArtists.value = deriveArtistsFromSongs(downloaded, limit = 500)
+                    showToast("Downloaded ${song.title}")
                     if (!_isAuthenticated.value || appSettings.offlineMode.value || !NetworkUtils.isNetworkAvailable(getApplication())) {
                         switchToDownloadedMode()
                     }
                 } else {
-                    _error.value = "Failed to download ${song.title}"
+                    showToast("Failed to download ${song.title}")
                 }
             } catch (e: Exception) {
-                _error.value = "Download failed: ${e.message}"
+                showToast("Download failed: ${e.message ?: "Server error"}")
             } finally {
                 _downloadingSongIds.value = _downloadingSongIds.value - song.id
             }
@@ -1484,7 +1514,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
      */
     fun downloadSongById(songId: String) {
         if (!_isOnline.value || !NetworkUtils.isNetworkAvailable(getApplication()) || appSettings.offlineMode.value) {
-            _error.value = "Cannot download while offline"
+            showToast("Cannot download while offline")
             return
         }
         val song = _allSongs.value.firstOrNull { it.id == songId }
@@ -1497,6 +1527,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
             viewModelScope.launch {
                 if (_downloadingSongIds.value.contains(songId)) return@launch
                 _downloadingSongIds.value = _downloadingSongIds.value + songId
+                showToast("Downloading track...")
                 try {
                     val success = repository.downloadSong(songId)
                     if (success) {
@@ -1504,12 +1535,15 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                         _downloadedSongs.value = downloaded
                         _downloadedAlbums.value = deriveAlbumsFromSongs(downloaded, limit = 500)
                         _downloadedArtists.value = deriveArtistsFromSongs(downloaded, limit = 500)
+                        showToast("Track downloaded")
                         if (!_isAuthenticated.value || appSettings.offlineMode.value || !NetworkUtils.isNetworkAvailable(getApplication())) {
                             switchToDownloadedMode()
                         }
+                    } else {
+                        showToast("Failed to download track")
                     }
                 } catch (e: Exception) {
-                    _error.value = "Download failed: ${e.message}"
+                    showToast("Download failed: ${e.message ?: "Server error"}")
                 } finally {
                     _downloadingSongIds.value = _downloadingSongIds.value - songId
                 }
@@ -1529,12 +1563,15 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     _downloadedSongs.value = downloaded
                     _downloadedAlbums.value = deriveAlbumsFromSongs(downloaded, limit = 500)
                     _downloadedArtists.value = deriveArtistsFromSongs(downloaded, limit = 500)
+                    showToast("Download removed")
                     if (!_isAuthenticated.value || appSettings.offlineMode.value || !NetworkUtils.isNetworkAvailable(getApplication())) {
                         switchToDownloadedMode()
                     }
+                } else {
+                    showToast("Failed to remove download")
                 }
             } catch (e: Exception) {
-                _error.value = "Failed to remove download: ${e.message}"
+                showToast("Failed to remove download: ${e.message}")
             }
         }
     }
@@ -1544,14 +1581,15 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
      */
     fun downloadSongs(songs: List<StreamingSong>) {
         if (!_isOnline.value || !NetworkUtils.isNetworkAvailable(getApplication()) || appSettings.offlineMode.value) {
-            _error.value = "Cannot download while offline"
+            showToast("Cannot download while offline")
             return
         }
+        val pending = songs.filter { !isSongDownloaded(it.id) && !_downloadingSongIds.value.contains(it.id) }
+        if (pending.isEmpty()) return
+        showToast("Downloading ${pending.size} tracks...")
         viewModelScope.launch {
-            songs.forEach { song ->
-                if (!_downloadingSongIds.value.contains(song.id) && !isSongDownloaded(song.id)) {
-                    downloadSong(song)
-                }
+            pending.forEach { song ->
+                downloadSong(song)
             }
         }
     }
@@ -1588,10 +1626,10 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     val updatedPlaylist = playlistsList.firstOrNull { it.id == newPlaylist.id } ?: newPlaylist
                     onCreated?.invoke(updatedPlaylist)
                 } else {
-                    _error.value = "Failed to create playlist: received null playlist from repository"
+                    showToast("Failed to create playlist: received null playlist from repository")
                 }
             } catch (e: Exception) {
-                _error.value = "Failed to create playlist: ${e.message}"
+                showToast("Failed to create playlist: ${e.message}")
             }
         }
     }
@@ -1609,10 +1647,10 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     _savedPlaylists.value = repository.getPlaylists().first().filterIsInstance<StreamingPlaylist>()
                     notificationManager.notifyPlaylistUpdated(newName, getSourceTypeName(_currentService.value))
                 } else {
-                    _error.value = "Failed to rename playlist"
+                    showToast("Failed to rename playlist")
                 }
             } catch (e: Exception) {
-                _error.value = "Failed to rename playlist: ${e.message}"
+                showToast("Failed to rename playlist: ${e.message}")
             }
         }
     }
@@ -1626,7 +1664,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 repository.addSongsToPlaylist(playlistId, listOf(song.id))
                 _savedPlaylists.value = repository.getPlaylists().first().filterIsInstance<StreamingPlaylist>()
             } catch (e: Exception) {
-                _error.value = "Failed to add song to playlist: ${e.message}"
+                showToast("Failed to add song to playlist: ${e.message}")
             }
         }
     }
@@ -1642,7 +1680,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 repository.addSongsToPlaylist(playlistId, songs.map { it.id })
                 _savedPlaylists.value = repository.getPlaylists().first().filterIsInstance<StreamingPlaylist>()
             } catch (e: Exception) {
-                _error.value = "Failed to add songs to playlist: ${e.message}"
+                showToast("Failed to add songs to playlist: ${e.message}")
             }
         }
     }
@@ -1656,7 +1694,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 repository.removeSongsFromPlaylist(playlistId, listOf(songId))
                 _savedPlaylists.value = repository.getPlaylists().first().filterIsInstance<StreamingPlaylist>()
             } catch (e: Exception) {
-                _error.value = "Failed to remove song from playlist: ${e.message}"
+                showToast("Failed to remove song from playlist: ${e.message}")
             }
         }
     }
@@ -1679,11 +1717,11 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                     _savedPlaylists.value = repository.getPlaylists().first().filterIsInstance<StreamingPlaylist>()
                     notificationManager.notifyPlaylistDeleted(playlist.name, getSourceTypeName(_currentService.value))
                 } else {
-                    _error.value = "Failed to remove playlist"
+                    showToast("Failed to remove playlist")
                 }
                 onComplete(success)
             } catch (e: Exception) {
-                _error.value = "Failed to remove playlist: ${e.message}"
+                showToast("Failed to remove playlist: ${e.message}")
                 onComplete(false)
             }
         }
@@ -1698,7 +1736,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
                 repository.followArtist(artist.id)
                 _followedArtists.value = repository.getFollowedArtists().first()
             } catch (e: Exception) {
-                _error.value = "Failed to follow artist: ${e.message}"
+                showToast("Failed to follow artist: ${e.message}")
             }
         }
     }

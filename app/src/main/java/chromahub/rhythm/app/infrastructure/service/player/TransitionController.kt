@@ -306,10 +306,6 @@ class TransitionController(
                 return@launch
             }
 
-            Log.d(TAG, "Preparing next track: ${nextMediaItem.mediaId}")
-            setState(TransitionState.PREPARING)
-            engine.prepareNext(nextMediaItem)
-
             // Check if crossfade is globally enabled
             val isCrossfadeEnabled = appSettings.crossfade.value
             if (!isCrossfadeEnabled) {
@@ -317,6 +313,10 @@ class TransitionController(
                 engine.setPauseAtEndOfMediaItems(false)
                 return@launch
             }
+
+            Log.d(TAG, "Preparing next track: ${nextMediaItem.mediaId}")
+            setState(TransitionState.PREPARING)
+            engine.prepareNext(nextMediaItem)
 
             // Build transition settings from global preferences
             val crossfadeDurationMs = (appSettings.crossfadeDuration.value * 1000).toInt()

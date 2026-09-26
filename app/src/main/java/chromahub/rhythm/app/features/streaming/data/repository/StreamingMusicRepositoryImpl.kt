@@ -46,6 +46,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Data model for persisting the streaming catalog to disk.
@@ -57,7 +59,9 @@ data class StreamingCatalogCache(
     val artists: List<StreamingArtist> = emptyList(),
     val playlists: List<StreamingPlaylist> = emptyList(),
     val likedSongIds: List<String> = emptyList(),
-    val lastSyncTimestamp: Long = 0L
+    val lastSyncTimestamp: Long = 0L,
+    /** Server library marker the songs were fetched under, or null if not known to be current. */
+    val libraryMarker: String? = null
 )
 
 /**
@@ -108,6 +112,16 @@ class StreamingMusicRepositoryImpl(
     private val downloadedSongsMap = LinkedHashMap<String, StreamingSong>()
     private val gson = com.google.gson.Gson()
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /** Serialises catalog syncs; several start-up triggers can request one at the same time. */
+    private val catalogSyncMutex = Mutex()
+
+    /**
+     * Server library marker ([SubsonicApiClient.getLibraryMarker]) of the catalog in memory, or
+     * null if that catalog is not known to match the server (partial fetch, scan running, etc.).
+     */
+    @Volatile
+    private var catalogLibraryMarker: String? = null
 
     init {
         loadDownloadedSongsIndex()
@@ -227,6 +241,7 @@ class StreamingMusicRepositoryImpl(
     private fun loadCatalogCacheForActiveService(targetServiceId: String? = null) {
         try {
             val serviceId = targetServiceId ?: activeServiceId()
+            catalogLibraryMarker = null
             val cacheFile = getCatalogCacheFile(serviceId)
             if (!cacheFile.exists()) return
 
@@ -240,6 +255,7 @@ class StreamingMusicRepositoryImpl(
                     songCache[song.id] = song
                 }
                 songsFlow.value = cache.songs
+                catalogLibraryMarker = cache.libraryMarker
 
                 if (cache.albums.isNotEmpty()) {
                     providerAlbumCache.clear()
@@ -297,7 +313,8 @@ class StreamingMusicRepositoryImpl(
                     artists = currentArtists,
                     playlists = currentPlaylists,
                     likedSongIds = currentLikedIds,
-                    lastSyncTimestamp = System.currentTimeMillis()
+                    lastSyncTimestamp = System.currentTimeMillis(),
+                    libraryMarker = catalogLibraryMarker
                 )
 
                 val cacheFile = getCatalogCacheFile(serviceId)
@@ -1414,6 +1431,25 @@ class StreamingMusicRepositoryImpl(
         limit: Int,
         onProgress: ((current: Int, total: Int, songsCount: Int) -> Unit)?
     ): List<StreamingSong> {
+        // Run syncs one at a time, so a queued sync can see that the previous one already
+        // fetched the current library instead of fetching it again.
+        return catalogSyncMutex.withLock { syncCatalogLocked(limit, onProgress) }
+    }
+
+    override suspend fun isCatalogOutdated(): Boolean {
+        if (appSettings.offlineMode.value) return false
+        // Only Subsonic reports library changes; other services keep using the cache until a
+        // manual refresh. A server that cannot vouch for its library (no lastModified, scan
+        // running) is treated the same way rather than triggering a full fetch on every start.
+        if (activeServiceId() != StreamingServiceId.SUBSONIC || !subsonicClient.isConnected()) return false
+        val serverMarker = subsonicClient.getLibraryMarker() ?: return false
+        return serverMarker != catalogLibraryMarker
+    }
+
+    private suspend fun syncCatalogLocked(
+        limit: Int,
+        onProgress: ((current: Int, total: Int, songsCount: Int) -> Unit)?
+    ): List<StreamingSong> {
         if (appSettings.offlineMode.value) {
             val downloadedList = downloadedSongsMap.values.toList()
             replaceCatalog(downloadedList)
@@ -1428,21 +1464,47 @@ class StreamingMusicRepositoryImpl(
         // Sync artists directly from provider first so all artists appear immediately
         syncArtists()
 
+        // Subsonic: skip the full album-by-album fetch while the server library is unchanged
+        // since the catalog in memory (from the previous sync or the disk cache) was fetched.
+        val libraryMarker = if (serviceId == StreamingServiceId.SUBSONIC) subsonicClient.getLibraryMarker() else null
+        if (libraryMarker != null && libraryMarker == catalogLibraryMarker && songsFlow.value.isNotEmpty()) {
+            Log.d("StreamingMusicRepo", "Server library unchanged; reusing catalog of ${songsFlow.value.size} songs")
+            refreshSubsonicStarredSongs()
+            syncPlaylists()
+            return songsFlow.value.filterIsInstance<StreamingSong>()
+        }
+
+        val fetchComplete = java.util.concurrent.atomic.AtomicBoolean(true)
         val providerSongs = when (serviceId) {
-            StreamingServiceId.SUBSONIC -> subsonicClient.fetchLibrarySongs(limit, onProgress)
+            StreamingServiceId.SUBSONIC -> subsonicClient.fetchLibrarySongs(limit, onProgress) { fetchComplete.set(false) }
             StreamingServiceId.JELLYFIN -> jellyfinClient.fetchLibrarySongs(limit, onProgress)
             else -> Result.success(emptyList())
         }.getOrElse { emptyList() }
 
         val mappedSongs = providerSongs.map { mapProviderSong(serviceId, it) }
         syncLikedSongIdsFromProviderSongs(serviceId, providerSongs)
-        replaceCatalog(mappedSongs)
+        // A partial fetch (skipped albums) is not marked, so the next sync fetches again.
+        replaceCatalog(mappedSongs, libraryMarker?.takeIf { fetchComplete.get() && providerSongs.isNotEmpty() })
         
         // Also sync playlists
         syncPlaylists()
         
         saveCatalogCache(serviceId)
         return mappedSongs
+    }
+
+    /** Stars can change without a library rescan, so refresh them with one getStarred2 request. */
+    private suspend fun refreshSubsonicStarredSongs() {
+        val starredIds = subsonicClient.getStarredSongIds().getOrNull() ?: return
+        val serviceId = StreamingServiceId.SUBSONIC
+        val servicePrefix = "$serviceId::"
+        val liked = starredIds.mapTo(HashSet()) { encodeSongId(serviceId, it) }
+        if (likedSongIds.filterTo(HashSet()) { it.startsWith(servicePrefix) } == liked) return
+
+        likedSongIds.removeIf { it.startsWith(servicePrefix) }
+        likedSongIds.addAll(liked)
+        updateLikedSongsFlow()
+        saveCatalogCache(serviceId)
     }
 
     private fun syncLikedSongIdsFromProviderSongs(serviceId: String, providerSongs: List<ProviderSong>) {
@@ -1601,8 +1663,13 @@ class StreamingMusicRepositoryImpl(
         }
     }
 
-    private suspend fun replaceCatalog(songs: List<StreamingSong>) {
+    /**
+     * @param libraryMarker server library marker [songs] were fetched under, if known to be the
+     *        complete, current library (see [SubsonicApiClient.getLibraryMarker]).
+     */
+    private suspend fun replaceCatalog(songs: List<StreamingSong>, libraryMarker: String? = null) {
         val serviceId = activeServiceId()
+        catalogLibraryMarker = libraryMarker
 
         songCache.clear()
         songs.forEach { song ->
@@ -1678,6 +1745,7 @@ class StreamingMusicRepositoryImpl(
     }
 
     private fun clearInMemoryCatalog() {
+        catalogLibraryMarker = null
         songCache.clear()
         followedPlaylistIds.clear()
         songsFlow.value = emptyList()

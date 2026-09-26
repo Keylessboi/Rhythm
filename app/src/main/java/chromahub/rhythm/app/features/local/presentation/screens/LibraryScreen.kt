@@ -428,6 +428,7 @@ fun LibraryScreen(
     var showAddToPlaylistSheet by remember { mutableStateOf(false) }
 
     var showSongInfoSheet by remember { mutableStateOf(false) }
+    var showSongInfoInEditMode by remember { mutableStateOf(false) }
     var showBulkExportDialog by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     var showOperationProgress by remember { mutableStateOf(false) }
@@ -697,9 +698,13 @@ fun LibraryScreen(
         
         SongInfoBottomSheet(
             song = displaySong,
-            onDismiss = { showSongInfoSheet = false },
+            onDismiss = {
+                showSongInfoSheet = false
+                showSongInfoInEditMode = false
+            },
             appSettings = appSettings,
             isStreamingMode = isStreamingMode,
+            startInEditMode = showSongInfoInEditMode,
             isDownloaded = streamingDownloadedSongIds.contains(displaySong.id),
             isDownloading = streamingDownloadingSongIds.contains(displaySong.id),
             onToggleDownload = if (isStreamingMode) ({
@@ -1831,6 +1836,11 @@ fun LibraryScreen(
                                             selectedSong = song
                                             showSongInfoSheet = true
                                         },
+                                        onEditSong = { song ->
+                                            selectedSong = song
+                                            showSongInfoInEditMode = true
+                                            showSongInfoSheet = true
+                                        },
                                         onAddToBlacklist = if (isStreamingMode) null else { song ->
                                             appSettings.addToBlacklist(song.id)
                                         },
@@ -1883,6 +1893,11 @@ fun LibraryScreen(
                                         onGoToAlbum = onAlbumBottomSheetClick,
                                         onShowSongInfo = { song ->
                                             selectedSong = song
+                                            showSongInfoSheet = true
+                                        },
+                                        onEditSong = { song ->
+                                            selectedSong = song
+                                            showSongInfoInEditMode = true
                                             showSongInfoSheet = true
                                         },
                                         onAddToBlacklist = if (isStreamingMode) null else { song ->
@@ -1991,6 +2006,11 @@ fun LibraryScreen(
                                     onGoToAlbum = onAlbumBottomSheetClick,
                                     onShowSongInfo = { song ->
                                         selectedSong = song
+                                        showSongInfoSheet = true
+                                    },
+                                    onEditSong = { song ->
+                                        selectedSong = song
+                                        showSongInfoInEditMode = true
                                         showSongInfoSheet = true
                                     },
                                     onAddToBlacklist = { song ->
@@ -2425,6 +2445,7 @@ fun SingleCardSongsContent(
     onGoToArtist: (Artist) -> Unit = {},
     onGoToAlbum: (Album) -> Unit = {},
     onShowSongInfo: (Song) -> Unit,
+    onEditSong: ((Song) -> Unit)? = null,
     onAddToBlacklist: ((Song) -> Unit)? = null,
     onDeleteSong: ((Song) -> Unit)? = null,
     onPlayQueue: (List<Song>) -> Unit = { _ -> },
@@ -2752,6 +2773,7 @@ fun SingleCardSongsContent(
                 resolvedArtist?.let { onGoToArtist(it) }
             },
             onShowSongInfo = { onShowSongInfo(targetSong) },
+            onEditSong = onEditSong?.let { fn -> { fn(targetSong) } },
             onAddToBlacklist = onAddToBlacklist?.let { fn -> { fn(targetSong) } },
             onDeleteSong = onDeleteSong?.let { fn -> { fn(targetSong) } },
             isDownloaded = isStreamingMode && streamingDownloadedSongIds.contains(targetSong.id),
@@ -6731,6 +6753,7 @@ fun YearGroupedSongsContent(
     onGoToArtist: (Artist) -> Unit = {},
     onGoToAlbum: (Album) -> Unit = {},
     onShowSongInfo: (Song) -> Unit,
+    onEditSong: ((Song) -> Unit)? = null,
     onAddToBlacklist: (Song) -> Unit,
     onDeleteSong: (Song) -> Unit = {},
     onPlayQueue: (List<Song>) -> Unit = { _ -> },
@@ -6923,6 +6946,7 @@ fun YearGroupedSongsContent(
                 onGoToArtist(Artist(id = targetSong.artist.trim(), name = targetSong.artist.trim()))
             },
             onShowSongInfo = { onShowSongInfo(targetSong) },
+            onEditSong = onEditSong?.let { fn -> { fn(targetSong) } },
             onAddToBlacklist = { onAddToBlacklist(targetSong) },
             onDeleteSong = { onDeleteSong(targetSong) },
             isDownloaded = isStreamingMode && streamingDownloadedSongIds.contains(targetSong.id),

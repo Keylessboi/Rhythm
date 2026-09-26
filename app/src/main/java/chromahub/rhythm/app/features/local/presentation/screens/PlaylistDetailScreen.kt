@@ -2674,7 +2674,7 @@ fun PlaylistSongItem(
         targetValue = when {
             isSelected -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
             isCurrentSong -> MaterialTheme.colorScheme.primary
-            else -> MaterialTheme.colorScheme.surface
+            else -> MaterialTheme.colorScheme.surfaceContainer
         },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -2711,7 +2711,7 @@ fun PlaylistSongItem(
         shadowElevation = 0.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 8.dp, vertical = 2.dp)
             .graphicsLayer {
                 scaleX = itemScale
                 scaleY = itemScale
@@ -2720,7 +2720,7 @@ fun PlaylistSongItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Checkbox for multi-select mode

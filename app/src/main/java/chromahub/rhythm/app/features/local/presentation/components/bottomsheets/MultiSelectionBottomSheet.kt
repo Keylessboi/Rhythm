@@ -409,20 +409,13 @@ private fun MultiSelectionHeader(
         
         Spacer(modifier = Modifier.height(18.dp))
         
-        // Selection info card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            shape = RoundedCornerShape(20.dp)
+        // Selection info
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
                 // Stacked album arts
                 val stackedImageSize = 56.dp
                 val stackedOverlap = 28.dp
@@ -467,13 +460,12 @@ private fun MultiSelectionHeader(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
-                            gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainer,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
             }
-        }
     }
 }
 
@@ -536,7 +528,7 @@ private fun StackedAlbumArts(
     val imageSize = 56.dp
     val overlap = 28.dp
     val borderWidth = 3.dp
-    val borderColor = MaterialTheme.colorScheme.surface
+    val borderColor = MaterialTheme.colorScheme.surfaceContainer
     
     Box(
         modifier = modifier,

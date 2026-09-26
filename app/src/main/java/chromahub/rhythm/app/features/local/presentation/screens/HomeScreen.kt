@@ -582,7 +582,7 @@ fun HomeScreen(
                     modifier = Modifier.padding(end = if (showSettings) 8.dp else 16.dp)
                 ) {
                     Icon(
-                        imageVector = RhythmIcons.SwapVert,
+                        imageVector = RhythmIcons.Edit,
                         contentDescription = context.getString(R.string.cd_reorder_home_sections),
                         modifier = Modifier.size(25.dp)
                     )

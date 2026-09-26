@@ -59,6 +59,9 @@ import chromahub.rhythm.app.shared.data.model.Song
 import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveShapeTarget
 import chromahub.rhythm.app.shared.presentation.components.common.M3PlaceholderType
 import chromahub.rhythm.app.shared.presentation.components.common.MarqueeText
+import chromahub.rhythm.app.shared.presentation.components.common.RhythmButtonSize
+import chromahub.rhythm.app.shared.presentation.components.common.RhythmButtonWeighted
+import chromahub.rhythm.app.shared.presentation.components.common.RhythmGroupedButton
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShape
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShapeFor
 import chromahub.rhythm.app.shared.presentation.components.icons.Icon
@@ -73,7 +76,7 @@ import coil.request.ImageRequest
 private data class SongOverflowItem(
     val title: String,
     val icon: MaterialSymbolIcon,
-    val isDestructive: Boolean = false,
+    val iconColor: Color = Color.Unspecified,
     val onClick: () -> Unit
 )
 
@@ -83,6 +86,7 @@ fun SongOverflowBottomSheet(
     song: Song,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
+    onEditSong: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     isFavorite: Boolean? = null,
@@ -119,6 +123,8 @@ fun SongOverflowBottomSheet(
         song.id.startsWith("ytm_") ||
         song.id.startsWith("saavn_")
 
+    val canEditSong = onEditSong != null && !isStreamingSong
+
     val artworkShape = rememberExpressiveShapeFor(
         ExpressiveShapeTarget.SONG_ART,
         fallbackShape = RoundedCornerShape(12.dp)
@@ -141,6 +147,11 @@ fun SongOverflowBottomSheet(
         }
     }
 
+    val primaryIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val secondaryIconColor = MaterialTheme.colorScheme.onSecondaryContainer
+    val tertiaryIconColor = MaterialTheme.colorScheme.onTertiaryContainer
+    val errorIconColor = MaterialTheme.colorScheme.error
+
     val menuItems = remember(
         song, isFavorite, isDownloaded, isDownloading,
         onPlayNext, onAddToQueue, onToggleFavorite, onAddToPlaylist,
@@ -153,6 +164,7 @@ fun SongOverflowBottomSheet(
                     SongOverflowItem(
                         title = context.getString(R.string.action_play_next),
                         icon = MaterialSymbolIcon("queue_play_next"),
+                        iconColor = primaryIconColor,
                         onClick = action
                     )
                 )
@@ -162,24 +174,7 @@ fun SongOverflowBottomSheet(
                     SongOverflowItem(
                         title = context.getString(R.string.action_add_to_queue),
                         icon = RhythmIcons.AddToQueue,
-                        onClick = action
-                    )
-                )
-            }
-            onGoToAlbum?.let { action ->
-                add(
-                    SongOverflowItem(
-                        title = context.getString(R.string.multiselectionbottomsheet_go_to_album),
-                        icon = MaterialSymbolIcon("album"),
-                        onClick = action
-                    )
-                )
-            }
-            onGoToArtist?.let { action ->
-                add(
-                    SongOverflowItem(
-                        title = context.getString(R.string.multiselectionbottomsheet_go_to_artist),
-                        icon = RhythmIcons.Artist,
+                        iconColor = primaryIconColor,
                         onClick = action
                     )
                 )
@@ -189,6 +184,27 @@ fun SongOverflowBottomSheet(
                     SongOverflowItem(
                         title = context.getString(R.string.library_action_add_to_playlist),
                         icon = MaterialSymbolIcon("playlist_add"),
+                        iconColor = primaryIconColor,
+                        onClick = action
+                    )
+                )
+            }
+            onGoToAlbum?.let { action ->
+                add(
+                    SongOverflowItem(
+                        title = context.getString(R.string.multiselectionbottomsheet_go_to_album),
+                        icon = MaterialSymbolIcon("album"),
+                        iconColor = secondaryIconColor,
+                        onClick = action
+                    )
+                )
+            }
+            onGoToArtist?.let { action ->
+                add(
+                    SongOverflowItem(
+                        title = context.getString(R.string.multiselectionbottomsheet_go_to_artist),
+                        icon = RhythmIcons.Artist,
+                        iconColor = secondaryIconColor,
                         onClick = action
                     )
                 )
@@ -199,6 +215,7 @@ fun SongOverflowBottomSheet(
                     SongOverflowItem(
                         title = if (fav) context.getString(R.string.action_dislike) else context.getString(R.string.action_like),
                         icon = if (fav) MaterialSymbolIcon("thumb_up", filled = true) else MaterialSymbolIcon("thumb_up"),
+                        iconColor = tertiaryIconColor,
                         onClick = action
                     )
                 )
@@ -208,6 +225,7 @@ fun SongOverflowBottomSheet(
                     SongOverflowItem(
                         title = context.getString(R.string.action_song_info),
                         icon = RhythmIcons.Info,
+                        iconColor = secondaryIconColor,
                         onClick = action
                     )
                 )
@@ -226,6 +244,7 @@ fun SongOverflowBottomSheet(
                             downloaded -> MaterialSymbolIcon("download_done", filled = true)
                             else -> MaterialSymbolIcon("download")
                         },
+                        iconColor = secondaryIconColor,
                         onClick = action
                     )
                 )
@@ -235,7 +254,7 @@ fun SongOverflowBottomSheet(
                     SongOverflowItem(
                         title = context.getString(R.string.action_add_to_blacklist),
                         icon = RhythmIcons.Block,
-                        isDestructive = true,
+                        iconColor = errorIconColor,
                         onClick = action
                     )
                 )
@@ -245,7 +264,7 @@ fun SongOverflowBottomSheet(
                     SongOverflowItem(
                         title = context.getString(R.string.action_delete_song),
                         icon = MaterialSymbolIcon("delete"),
-                        isDestructive = true,
+                        iconColor = errorIconColor,
                         onClick = action
                     )
                 )
@@ -254,6 +273,7 @@ fun SongOverflowBottomSheet(
                 SongOverflowItem(
                     title = context.getString(R.string.action_share),
                     icon = MaterialSymbolIcon("share"),
+                    iconColor = secondaryIconColor,
                     onClick = finalOnShare
                 )
             )
@@ -362,28 +382,68 @@ fun SongOverflowBottomSheet(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                Surface(
-                    onClick = {
-                        HapticUtils.performHapticFeedback(context, haptic, HapticType.HEAVY)
-                        onPlay()
-                        onDismiss()
-                    },
-                    modifier = Modifier.size(52.dp),
-                    shape = playButtonShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    tonalElevation = 0.dp
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
+                if (canEditSong) {
+                    RhythmGroupedButton(
+                        size = RhythmButtonSize.Small,
+                        isFillMaxWidth = false,
+                        modifier = Modifier.widthIn(max = 120.dp)
                     ) {
-                        Icon(
-                            imageVector = RhythmIcons.Play,
-                            contentDescription = stringResource(R.string.action_play),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(24.dp)
+                        RhythmButtonWeighted(
+                            onClick = {
+                                HapticUtils.performHapticFeedback(context, haptic, HapticType.HEAVY)
+                                onPlay()
+                                onDismiss()
+                            },
+                            weight = 1f,
+                            size = RhythmButtonSize.Small,
+                            height = 44.dp,
+                            iconSize = 22.dp,
+                            isFirst = true,
+                            isLast = false,
+                            icon = RhythmIcons.Play,
+                            contentDescription = stringResource(R.string.action_play)
                         )
+
+                        RhythmButtonWeighted(
+                            onClick = {
+                                HapticUtils.performHapticFeedback(context, haptic, HapticType.HEAVY)
+                                onEditSong.invoke()
+                                onDismiss()
+                            },
+                            weight = 1f,
+                            size = RhythmButtonSize.Small,
+                            height = 44.dp,
+                            iconSize = 22.dp,
+                            isFirst = false,
+                            isLast = true,
+                            icon = RhythmIcons.Edit,
+                            contentDescription = stringResource(R.string.bottomsheet_timer_edit)
+                        )
+                    }
+                } else {
+                    Surface(
+                        onClick = {
+                            HapticUtils.performHapticFeedback(context, haptic, HapticType.HEAVY)
+                            onPlay()
+                            onDismiss()
+                        },
+                        modifier = Modifier.size(52.dp),
+                        shape = playButtonShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        tonalElevation = 0.dp
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                imageVector = RhythmIcons.Play,
+                                contentDescription = stringResource(R.string.action_play),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -415,12 +475,6 @@ fun SongOverflowBottomSheet(
                             label = "overflow_item_scale"
                         )
 
-                        val itemColor = if (item.isDestructive) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-
                         Card(
                             onClick = {
                                 HapticUtils.performHapticFeedback(context, haptic, HapticType.HEAVY)
@@ -435,7 +489,7 @@ fun SongOverflowBottomSheet(
                                 },
                             shape = groupedBottomSheetItemShape(index, menuItems.size),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                                containerColor = MaterialTheme.colorScheme.surface
                             ),
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             interactionSource = interactionSource
@@ -449,7 +503,7 @@ fun SongOverflowBottomSheet(
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = null,
-                                    tint = itemColor,
+                                    tint = if (item.iconColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface else item.iconColor,
                                     modifier = Modifier.size(24.dp)
                                 )
 
@@ -459,9 +513,9 @@ fun SongOverflowBottomSheet(
                                     text = item.title,
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Medium,
-                                        color = itemColor
+                                        color = MaterialTheme.colorScheme.onSurface
                                     ),
-                                    gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    gradientEdgeColor = MaterialTheme.colorScheme.surface,
                                     modifier = Modifier.weight(1f)
                                 )
                             }

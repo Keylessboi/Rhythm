@@ -72,6 +72,8 @@ import coil.request.ImageRequest
 import chromahub.rhythm.app.util.ImageUtils
 import chromahub.rhythm.app.shared.presentation.components.common.M3PlaceholderType
 import chromahub.rhythm.app.shared.presentation.components.common.MarqueeText
+import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveShapeTarget
+import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShapeFor
 import androidx.compose.ui.layout.ContentScale
 
 private data class OptionItem(
@@ -140,6 +142,11 @@ fun PlaylistSongOptionsBottomSheet(
     val context = LocalContext.current
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
 
+    val artworkShape = rememberExpressiveShapeFor(
+        ExpressiveShapeTarget.SONG_ART,
+        fallbackShape = RoundedCornerShape(12.dp)
+    )
+
     val scrollState = rememberScrollState()
 
     RhythmAdaptiveModalSheet(
@@ -177,22 +184,15 @@ fun PlaylistSongOptionsBottomSheet(
                 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                    shape = RoundedCornerShape(20.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
                         Surface(
-                            modifier = Modifier.size(56.dp),
-                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(68.dp),
+                            shape = artworkShape,
                             tonalElevation = 0.dp
                         ) {
                             AsyncImage(
@@ -205,7 +205,8 @@ fun PlaylistSongOptionsBottomSheet(
                                     ))
                                     .build(),
                                 contentDescription = null,
-                                contentScale = ContentScale.Crop
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
 
@@ -223,7 +224,7 @@ fun PlaylistSongOptionsBottomSheet(
                                 fontWeight = FontWeight.SemiBold
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
 
                             MarqueeText(
                                 text = song.title,
@@ -231,7 +232,7 @@ fun PlaylistSongOptionsBottomSheet(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
-                                gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainer,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -240,12 +241,11 @@ fun PlaylistSongOptionsBottomSheet(
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 ),
-                                gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                gradientEdgeColor = MaterialTheme.colorScheme.surfaceContainer,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
-                }
             }
 
             AdaptiveSheetScrollContainer(

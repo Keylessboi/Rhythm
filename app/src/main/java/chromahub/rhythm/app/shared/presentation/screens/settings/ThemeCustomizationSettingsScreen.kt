@@ -1375,14 +1375,14 @@ fun FontCard(
             // Font preview text
             Surface(
                 color = if (isSelected)
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)
                 else
                     MaterialTheme.colorScheme.surfaceContainerLowest,
                 shape = RoundedCornerShape(12.dp),
-                border = if (!isSelected)
-                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                border = if (isSelected)
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.24f))
                 else
-                    null,
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
@@ -1390,7 +1390,7 @@ fun FontCard(
                     fontFamily = getFontFamilyByName(option.name),
                     style = getFontPreviewStyle(option.name),
                     color = if (isSelected)
-                        MaterialTheme.colorScheme.primaryContainer
+                        MaterialTheme.colorScheme.onPrimaryContainer
                     else
                         MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(16.dp)

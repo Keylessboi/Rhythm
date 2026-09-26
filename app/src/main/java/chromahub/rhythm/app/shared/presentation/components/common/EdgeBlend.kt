@@ -26,13 +26,17 @@ import androidx.compose.ui.unit.dp
  * Blends the leading/trailing edges of a horizontally scrollable row into whatever sits
  * behind it, fading an edge only while that side still has hidden content.
  *
+ * The gradient spans [softness] times [fadeWidth] so it eases out further inward, starting
+ * at the row edge and reaching full content more gradually.
+ *
  * Pass [lazyListState] for a `LazyRow`, or [scrollState] for `Modifier.horizontalScroll`.
  * [fadeWidth] should roughly match the row's gutter (padding + contentPadding + spacing).
  */
 fun Modifier.horizontalEdgeBlend(
     lazyListState: LazyListState? = null,
     scrollState: ScrollState? = null,
-    fadeWidth: Dp = 20.dp
+    fadeWidth: Dp = 20.dp,
+    softness: Float = 1.75f
 ): Modifier = composed {
     val canScrollBackward = lazyListState?.canScrollBackward
         ?: scrollState?.canScrollBackward
@@ -68,7 +72,7 @@ fun Modifier.horizontalEdgeBlend(
                 drawContent()
 
                 if (startFade > 0.dp) {
-                    val width = startFade.toPx()
+                    val width = startFade.toPx() * softness
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(Color.Transparent, Color.Black),
@@ -80,7 +84,7 @@ fun Modifier.horizontalEdgeBlend(
                 }
 
                 if (endFade > 0.dp) {
-                    val width = endFade.toPx()
+                    val width = endFade.toPx() * softness
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(Color.Black, Color.Transparent),

@@ -201,6 +201,7 @@ fun SongInfoBottomSheet(
     onShowLyricsEditor: (() -> Unit)? = null,
     sheetState: SheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
     isStreamingMode: Boolean = false,
+    startInEditMode: Boolean = false,
     isDownloaded: Boolean = false,
     isDownloading: Boolean = false,
     onToggleDownload: (() -> Unit)? = null
@@ -211,7 +212,13 @@ fun SongInfoBottomSheet(
     var extendedInfo by remember { mutableStateOf<ExtendedSongInfo?>(null) }
     var isLoadingMetadata by remember { mutableStateOf(true) }
     var isLoadingStats by remember { mutableStateOf(true) }
-    var showEditSheet by remember { mutableStateOf(false) }
+    var showEditSheet by remember { mutableStateOf(startInEditMode && !isStreamingMode) }
+
+    LaunchedEffect(startInEditMode) {
+        if (startInEditMode && !isStreamingMode) {
+            showEditSheet = true
+        }
+    }
     
     val isTablet = windowScreenWidthDp() >= 600
     val isLandscapeTablet = isTablet && windowScreenWidthDp() > windowScreenHeightDp()
@@ -496,7 +503,59 @@ fun SongInfoBottomSheet(
         )
     }
 
-    if (isLandscapeTablet) {
+    val renderEditSheet: @Composable () -> Unit = {
+        EditSongSheet(
+            song = currentSong ?: song,
+            extendedInfo = extendedInfo,
+            onDismiss = {
+                showEditSheet = false
+                if (startInEditMode) onDismiss()
+            },
+            onSave = { title: String, artist: String, album: String, genre: String, year: Int, trackNumber: Int, artworkUri: Uri?, removeArtwork: Boolean, albumArtist: String?, composer: String?, discNumber: Int, onComplete ->
+                currentSong = currentSong?.copy(
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    genre = genre,
+                    year = year,
+                    trackNumber = trackNumber,
+                    artworkUri = when {
+                        removeArtwork -> null
+                        artworkUri != null -> artworkUri
+                        else -> currentSong?.artworkUri
+                    },
+                    albumArtist = albumArtist,
+                    discNumber = discNumber
+                )
+                onEditSong?.invoke(
+                    title,
+                    artist,
+                    album,
+                    genre,
+                    year,
+                    trackNumber,
+                    artworkUri,
+                    removeArtwork,
+                    albumArtist,
+                    composer,
+                    discNumber
+                ) { success ->
+                    onComplete(success)
+                    if (success) {
+                        showEditSheet = false
+                    }
+                }
+            },
+            onShowLyricsEditor = onShowLyricsEditor,
+            songArtShape = songArtShape
+        )
+    }
+
+    if (startInEditMode) {
+        if (showEditSheet) {
+            renderEditSheet()
+        }
+    } else if (isLandscapeTablet) {
         Dialog(
             onDismissRequest = onDismiss,
             properties = DialogProperties(
@@ -719,48 +778,7 @@ fun SongInfoBottomSheet(
         }
 
         if (showEditSheet) {
-            EditSongSheet(
-                song = currentSong ?: song,
-                extendedInfo = extendedInfo,
-                onDismiss = { showEditSheet = false },
-                onSave = { title: String, artist: String, album: String, genre: String, year: Int, trackNumber: Int, artworkUri: Uri?, removeArtwork: Boolean, albumArtist: String?, composer: String?, discNumber: Int, onComplete ->
-                    currentSong = currentSong?.copy(
-                        title = title,
-                        artist = artist,
-                        album = album,
-                        genre = genre,
-                        year = year,
-                        trackNumber = trackNumber,
-                        artworkUri = when {
-                            removeArtwork -> null
-                            artworkUri != null -> artworkUri
-                            else -> currentSong?.artworkUri
-                        },
-                        albumArtist = albumArtist,
-                        discNumber = discNumber
-                    )
-                    onEditSong?.invoke(
-                        title,
-                        artist,
-                        album,
-                        genre,
-                        year,
-                        trackNumber,
-                        artworkUri,
-                        removeArtwork,
-                        albumArtist,
-                        composer,
-                        discNumber
-                    ) { success ->
-                        onComplete(success)
-                        if (success) {
-                            showEditSheet = false
-                        }
-                    }
-                },
-                onShowLyricsEditor = onShowLyricsEditor,
-                songArtShape = songArtShape
-            )
+            renderEditSheet()
         }
     } else {
         val infoListState = rememberLazyListState()
@@ -1005,48 +1023,7 @@ fun SongInfoBottomSheet(
     }
         
     if (showEditSheet) {
-            EditSongSheet(
-                song = currentSong ?: song,
-                extendedInfo = extendedInfo,
-                onDismiss = { showEditSheet = false },
-                onSave = { title, artist, album, genre, year, trackNumber, artworkUri, removeArtwork, albumArtist, composer, discNumber, onComplete ->
-                    currentSong = currentSong?.copy(
-                        title = title,
-                        artist = artist,
-                        album = album,
-                        genre = genre,
-                        year = year,
-                        trackNumber = trackNumber,
-                        artworkUri = when {
-                            removeArtwork -> null
-                            artworkUri != null -> artworkUri
-                            else -> currentSong?.artworkUri
-                        },
-                        albumArtist = albumArtist,
-                        discNumber = discNumber
-                    )
-                    onEditSong?.invoke(
-                        title,
-                        artist,
-                        album,
-                        genre,
-                        year,
-                        trackNumber,
-                        artworkUri,
-                        removeArtwork,
-                        albumArtist,
-                        composer,
-                        discNumber
-                    ) { success ->
-                        onComplete(success)
-                        if (success) {
-                            showEditSheet = false
-                        }
-                    }
-                },
-                onShowLyricsEditor = onShowLyricsEditor,
-                songArtShape = songArtShape
-            )
+            renderEditSheet()
         }
     }
     }

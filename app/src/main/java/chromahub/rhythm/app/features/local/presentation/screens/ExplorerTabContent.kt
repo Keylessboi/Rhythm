@@ -35,7 +35,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -58,6 +61,7 @@ import chromahub.rhythm.app.shared.presentation.components.common.DataProcessing
 import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveShapeTarget
 import chromahub.rhythm.app.shared.presentation.components.common.rememberExpressiveShapeFor
 import chromahub.rhythm.app.shared.presentation.components.common.ExpressiveOutlinedButton
+import chromahub.rhythm.app.shared.presentation.components.common.horizontalEdgeBlend
 import chromahub.rhythm.app.shared.presentation.theme.ExpressiveMaterialShape
 import chromahub.rhythm.app.shared.presentation.theme.rememberExpressiveShape
 import chromahub.rhythm.app.util.HapticUtils
@@ -1936,7 +1940,9 @@ fun ExplorerBreadcrumb(
 
     LazyRow(
         state = scrollState,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalEdgeBlend(lazyListState = scrollState, fadeWidth = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
         contentPadding = PaddingValues(horizontal = 4.dp)
@@ -1954,7 +1960,7 @@ fun ExplorerBreadcrumb(
                     onGoHome()
                 },
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier
                     .height(36.dp)
                     .graphicsLayer {
@@ -1971,12 +1977,12 @@ fun ExplorerBreadcrumb(
                         imageVector = RhythmIcons.Home,
                         contentDescription = stringResource(R.string.settings_home_screen),
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = context.getString(R.string.library_home),
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -2006,13 +2012,23 @@ fun ExplorerBreadcrumb(
 
                 val chipBackgroundColor by animateColorAsState(
                     targetValue = if (isLastSegment)
-                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f)
+                        Color.Transparent
                     else
-                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f),
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
                     label = "chipBackground_$index"
                 )
 
+                val chipContentColor by animateColorAsState(
+                    targetValue = if (isLastSegment)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
+                    label = "chipContent_$index"
+                )
+
+                val underlineColor = MaterialTheme.colorScheme.primary
                 Surface(
                     onClick = {
                         HapticUtils.performHapticFeedback(context, haptics, HapticType.HEAVY)
@@ -2020,15 +2036,25 @@ fun ExplorerBreadcrumb(
                     },
                     shape = RoundedCornerShape(18.dp),
                     color = chipBackgroundColor,
-                    border = if (isLastSegment) BorderStroke(
-                        1.5.dp,
-                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)
-                    ) else null,
                     modifier = Modifier
                         .height(36.dp)
                         .graphicsLayer {
                             scaleX = chipScale
                             scaleY = chipScale
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            if (isLastSegment) {
+                                val inset = 14.dp.toPx()
+                                val underlineY = size.height - 1.dp.toPx()
+                                drawLine(
+                                    color = underlineColor,
+                                    start = Offset(inset, underlineY),
+                                    end = Offset(size.width - inset, underlineY),
+                                    strokeWidth = 2.dp.toPx(),
+                                    cap = StrokeCap.Round
+                                )
+                            }
                         }
                 ) {
                     val displayText = if (segmentDisplay.length > 15) {
@@ -2038,16 +2064,18 @@ fun ExplorerBreadcrumb(
                     }
 
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .padding(horizontal = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         if (isLastSegment) {
                             Icon(
                                 imageVector = RhythmIcons.Folder,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                tint = chipContentColor
                             )
                         }
 
@@ -2056,22 +2084,10 @@ fun ExplorerBreadcrumb(
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = if (isLastSegment) FontWeight.Bold else FontWeight.Normal
                             ),
-                            color = if (isLastSegment)
-                                MaterialTheme.colorScheme.onTertiaryContainer
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = chipContentColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-
-                        if (isLastSegment) {
-                            Icon(
-                                imageVector = RhythmIcons.Location,
-                                contentDescription = stringResource(R.string.cd_current_location),
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
                     }
                 }
             }

@@ -94,6 +94,9 @@ class StreamingMusicRepositoryImpl(
     private val followedPlaylistIds = linkedSetOf<String>()
 
     private val songCache = LinkedHashMap<String, StreamingSong>()
+    // Starred songs from the provider (Subsonic getStarred2), so liked songs outside the synced
+    // catalog still show and play.
+    private val starredSongCache = LinkedHashMap<String, StreamingSong>()
     private val artistArtworkCache = LinkedHashMap<String, String>()
     private val providerAlbumCache = LinkedHashMap<String, StreamingAlbum>()
 
@@ -1408,7 +1411,7 @@ class StreamingMusicRepositoryImpl(
 
     override fun getPlaylists(): Flow<List<PlaylistItem>> = playlistsFlow.asStateFlow()
 
-    override suspend fun getSongById(id: String): PlayableItem? = songCache[id]
+    override suspend fun getSongById(id: String): PlayableItem? = songCache[id] ?: starredSongCache[id]
 
     override suspend fun syncCatalog(
         limit: Int,
@@ -1437,12 +1440,35 @@ class StreamingMusicRepositoryImpl(
         val mappedSongs = providerSongs.map { mapProviderSong(serviceId, it) }
         syncLikedSongIdsFromProviderSongs(serviceId, providerSongs)
         replaceCatalog(mappedSongs)
+        if (serviceId == StreamingServiceId.SUBSONIC) {
+            refreshSubsonicStarredSongs()
+        }
         
         // Also sync playlists
         syncPlaylists()
         
         saveCatalogCache(serviceId)
         return mappedSongs
+    }
+
+    /**
+     * Liked songs from one getStarred2 request, complete even when the library sync is partial.
+     * On failure the liked ids derived from the synced songs are kept.
+     */
+    private suspend fun refreshSubsonicStarredSongs() {
+        val serviceId = StreamingServiceId.SUBSONIC
+        val starred = subsonicClient.getStarredSongs().getOrElse { e ->
+            Log.w("StreamingMusicRepo", "getStarred2 failed; liked songs limited to the synced catalog", e)
+            return
+        }.map { mapProviderSong(serviceId, it) }
+
+        val merged = StarredSongs.mergeLikedIds(likedSongIds, "$serviceId::", starred)
+        likedSongIds.clear()
+        likedSongIds.addAll(merged)
+        starredSongCache.clear()
+        starred.forEach { starredSongCache[it.id] = it }
+        updateLikedSongsFlow()
+        Log.d("StreamingMusicRepo", "Liked songs: ${starred.size} starred, ${starred.count { songCache.containsKey(it.id) }} in the synced catalog")
     }
 
     private fun syncLikedSongIdsFromProviderSongs(serviceId: String, providerSongs: List<ProviderSong>) {
@@ -1687,7 +1713,7 @@ class StreamingMusicRepositoryImpl(
     }
 
     private fun updateLikedSongsFlow() {
-        likedSongsFlow.value = likedSongIds.mapNotNull { id -> songCache[id] }
+        likedSongsFlow.value = StarredSongs.likedSongs(likedSongIds, songCache, starredSongCache)
     }
 
     private fun updateSavedAlbumsFlow() {

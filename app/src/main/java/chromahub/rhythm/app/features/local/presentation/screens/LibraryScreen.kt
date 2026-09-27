@@ -2481,7 +2481,7 @@ fun SingleCardSongsContent(
     var songForOverflow by remember { mutableStateOf<Song?>(null) }
     
     val isLoading = false
-    val preparedSongs = remember(songs) {
+    val preparedSongs by rememberOffMain(emptyList<Song>(), songs) {
         songs.distinctBy { "${it.id}_${it.uri}" }
     }
     

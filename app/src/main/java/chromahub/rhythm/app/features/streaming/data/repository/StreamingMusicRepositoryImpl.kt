@@ -232,8 +232,8 @@ class StreamingMusicRepositoryImpl(
     }
 
     /** Progress of an interrupted full library fetch (see [ResumableLibraryFetch]). */
-    private fun getLibraryFetchCheckpointFile(serviceId: String): java.io.File {
-        return java.io.File(context.filesDir, "streaming_catalog_${serviceId}.partial.json")
+    private fun getLibraryFetchCheckpointDir(serviceId: String): java.io.File {
+        return java.io.File(context.filesDir, "streaming_catalog_${serviceId}.partial")
     }
 
     private fun loadCatalogCacheForActiveService(targetServiceId: String? = null) {
@@ -356,7 +356,7 @@ class StreamingMusicRepositoryImpl(
 
         val connection = result.getOrElse { throw it }
         // A new login may be another account or server: never resume its predecessor's fetch.
-        catalogCacheWriter.delete(getLibraryFetchCheckpointFile(normalizedService))
+        ResumableLibraryFetch.discard(getLibraryFetchCheckpointDir(normalizedService))
         return ServiceConnectionInfo(
             displayName = connection.displayName,
             serverUrl = connection.serverUrl
@@ -372,7 +372,7 @@ class StreamingMusicRepositoryImpl(
 
         try {
             catalogCacheWriter.delete(getCatalogCacheFile(normalized))
-            catalogCacheWriter.delete(getLibraryFetchCheckpointFile(normalized))
+            ResumableLibraryFetch.discard(getLibraryFetchCheckpointDir(normalized))
         } catch (e: Exception) {
             Log.e("StreamingMusicRepo", "Error deleting catalog cache on disconnect", e)
         }
@@ -1472,7 +1472,7 @@ class StreamingMusicRepositoryImpl(
         limit: Int,
         onProgress: ((current: Int, total: Int, songsCount: Int) -> Unit)?
     ): Result<List<ProviderSong>> {
-        val fetch = ResumableLibraryFetch(getLibraryFetchCheckpointFile(StreamingServiceId.SUBSONIC), catalogCacheWriter, gson)
+        val fetch = ResumableLibraryFetch(getLibraryFetchCheckpointDir(StreamingServiceId.SUBSONIC), catalogCacheWriter, gson)
         return fetch.fetch(subsonicClient.getLibraryLastModified(), limit, onProgress) { startAlbumOffset, pageLimit, progress, onPage ->
             subsonicClient.fetchLibrarySongs(pageLimit, progress, startAlbumOffset, onPage)
         }

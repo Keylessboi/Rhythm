@@ -8,37 +8,36 @@ package chromahub.rhythm.app.features.streaming.data.repository
 import android.util.Log
 import chromahub.rhythm.app.features.streaming.data.provider.ProviderSong
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.io.File
 
 /**
- * Progress of an interrupted full library fetch, persisted after every album page.
+ * Index of an interrupted full library fetch: every album page before [nextAlbumOffset] is
+ * stored in its own page file next to it.
  *
  * @param lastModified server library `lastModified` when the fetch started; the checkpoint is
  *        only resumed while the server still reports the same value.
  * @param nextAlbumOffset album-list offset of the first page not fetched yet.
- * @param songs songs fetched so far, in fetch order.
  */
 data class LibraryFetchCheckpoint(
     val lastModified: Long,
-    val nextAlbumOffset: Int,
-    val songs: List<ProviderSong>
+    val nextAlbumOffset: Int
 )
 
 /**
  * Runs a paged full library fetch so that it survives the app being killed or the sync being
- * cancelled: after a page the songs fetched so far are checkpointed to [checkpointFile], and
- * the next fetch continues from the first page not yet fetched instead of starting over. The
- * checkpoint is discarded when the server library changed in between (different
- * `lastModified`), and deleted once a fetch completes.
- *
- * Each checkpoint rewrites every song fetched so far (tens of MB for a large library), so it is
- * written at most every [minCheckpointIntervalMs]; a kill loses at most that much work.
+ * cancelled. Each fetched album page is written to its own small file in [checkpointDir]
+ * (`page-<offset>.json`), followed by a tiny index ([LibraryFetchCheckpoint]), so the total
+ * written stays linear in the library size. The next fetch reads the pages back and continues
+ * from the first page not yet fetched instead of starting over. The checkpoint is discarded
+ * when the server library changed in between (different `lastModified`), and deleted once a
+ * fetch completes.
  */
 internal class ResumableLibraryFetch(
-    private val checkpointFile: File,
+    private val checkpointDir: File,
     private val writer: CatalogCacheWriter,
     private val gson: Gson = Gson(),
-    private val minCheckpointIntervalMs: Long = 10_000L,
+    private val minProgressIntervalMs: Long = 500L,
     private val clock: () -> Long = System::currentTimeMillis
 ) {
 
@@ -52,6 +51,8 @@ internal class ResumableLibraryFetch(
         ): Result<List<ProviderSong>>
     }
 
+    private val indexFile = File(checkpointDir, "index.json")
+
     /**
      * @param lastModified the server's current library `lastModified`, or null if unknown; then
      *        nothing is checkpointed or resumed and this is a plain full fetch.
@@ -62,58 +63,89 @@ internal class ResumableLibraryFetch(
         onProgress: ((current: Int, total: Int, songsCount: Int) -> Unit)?,
         pagedFetch: PagedFetch
     ): Result<List<ProviderSong>> {
-        val checkpoint = lastModified?.let { readCheckpoint()?.takeIf { it.lastModified == lastModified } }
         val fetched = LinkedHashMap<String, ProviderSong>()
-        checkpoint?.songs?.forEach { fetched[it.providerId] = it }
+        val checkpoint = lastModified?.let { readCheckpoint(it, fetched) }
         if (checkpoint != null) {
             Log.d(TAG, "Resuming library fetch at album ${checkpoint.nextAlbumOffset} with ${fetched.size} songs")
         } else {
-            writer.delete(checkpointFile)
+            fetched.clear()
+            discard(checkpointDir)
         }
         val resumedCount = fetched.size
         if (resumedCount >= limit) {
-            writer.delete(checkpointFile)
+            discard(checkpointDir)
             return Result.success(fetched.values.take(limit))
         }
 
-        var lastCheckpointAt = Long.MIN_VALUE
+        var pageStart = checkpoint?.nextAlbumOffset ?: 0
+        var lastProgressAt = Long.MIN_VALUE
         val result = pagedFetch.fetch(
-            startAlbumOffset = checkpoint?.nextAlbumOffset ?: 0,
+            startAlbumOffset = pageStart,
             limit = limit - resumedCount,
             onProgress = onProgress?.let { report ->
-                { current, total, songsCount -> report(current, total, songsCount + resumedCount) }
+                { current, total, songsCount ->
+                    // Progress drives UI state and a notification; at most a few updates a second.
+                    val now = clock()
+                    if (lastProgressAt == Long.MIN_VALUE || now - lastProgressAt >= minProgressIntervalMs) {
+                        lastProgressAt = now
+                        report(current, total, songsCount + resumedCount)
+                    }
+                }
             }
         ) { pageSongs, nextAlbumOffset ->
             pageSongs.forEach { fetched.putIfAbsent(it.providerId, it) }
-            val now = clock()
-            if (lastModified != null && (lastCheckpointAt == Long.MIN_VALUE || now - lastCheckpointAt >= minCheckpointIntervalMs)) {
-                lastCheckpointAt = now
-                val snapshot = LibraryFetchCheckpoint(lastModified, nextAlbumOffset, fetched.values.toList())
-                writer.write(checkpointFile, { snapshot }) { checkpoint, out -> gson.toJson(checkpoint, out) }
+            if (lastModified != null) {
+                checkpointDir.mkdirs()
+                // The page first, then the index that makes it count: a kill in between only
+                // leaves a page that is fetched (and overwritten) again.
+                writer.write(pageFile(pageStart), { pageSongs }) { songs, out -> gson.toJson(songs, out) }
+                val index = LibraryFetchCheckpoint(lastModified, nextAlbumOffset)
+                writer.write(indexFile, { index }) { value, out -> gson.toJson(value, out) }
             }
+            pageStart = nextAlbumOffset
         }
 
         // On failure the checkpoint stays, so the next sync continues from the last page.
         return result.map { songs ->
             songs.forEach { fetched.putIfAbsent(it.providerId, it) }
-            writer.delete(checkpointFile)
+            discard(checkpointDir)
             fetched.values.take(limit)
         }
     }
 
-    private fun readCheckpoint(): LibraryFetchCheckpoint? {
-        if (!checkpointFile.exists()) return null
+    private fun pageFile(albumOffset: Int) = File(checkpointDir, "page-%08d.json".format(albumOffset))
+
+    /** Reads a matching checkpoint's pages into [into]; null (and [into] unusable) otherwise. */
+    private fun readCheckpoint(lastModified: Long, into: LinkedHashMap<String, ProviderSong>): LibraryFetchCheckpoint? {
+        if (!indexFile.exists()) return null
         return try {
-            checkpointFile.bufferedReader().use { gson.fromJson(it, LibraryFetchCheckpoint::class.java) }
+            val index = indexFile.bufferedReader().use { gson.fromJson(it, LibraryFetchCheckpoint::class.java) }
+                ?.takeIf { it.lastModified == lastModified && it.nextAlbumOffset > 0 }
+                ?: return null
+            val songListType = object : TypeToken<List<ProviderSong>>() {}.type
+            val pages = checkpointDir.listFiles { file -> PAGE_NAME.matches(file.name) }.orEmpty()
+                .map { PAGE_NAME.matchEntire(it.name)!!.groupValues[1].toInt() to it }
+                .filter { (offset, _) -> offset < index.nextAlbumOffset }
+                .sortedBy { (offset, _) -> offset }
+            for ((_, file) in pages) {
+                val songs: List<ProviderSong> = file.bufferedReader().use { gson.fromJson(it, songListType) }
                 // Gson leaves missing fields null despite the Kotlin types; treat that as corrupt.
-                ?.takeIf { it.songs.all { song -> song.providerId.isNotEmpty() } && it.nextAlbumOffset > 0 }
+                songs.forEach { song -> into.putIfAbsent(song.providerId.also { id -> require(id.isNotEmpty()) }, song) }
+            }
+            index
         } catch (e: Exception) {
             Log.w(TAG, "Ignoring unreadable library fetch checkpoint", e)
             null
         }
     }
 
-    private companion object {
+    companion object {
         private const val TAG = "ResumableLibraryFetch"
+        private val PAGE_NAME = Regex("""page-(\d+)\.json""")
+
+        /** Deletes a checkpoint (e.g. on logout or a new login). */
+        fun discard(checkpointDir: File) {
+            if (checkpointDir.exists()) checkpointDir.deleteRecursively()
+        }
     }
 }

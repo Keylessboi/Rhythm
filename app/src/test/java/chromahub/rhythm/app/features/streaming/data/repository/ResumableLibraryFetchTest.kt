@@ -25,13 +25,13 @@ import java.util.Collections
 class ResumableLibraryFetchTest {
 
     private lateinit var dir: File
-    private lateinit var checkpointFile: File
+    private lateinit var checkpointDir: File
     private val writer = CatalogCacheWriter()
 
     @Before
     fun setUp() {
         dir = Files.createTempDirectory("library-fetch").toFile()
-        checkpointFile = File(dir, "streaming_catalog_subsonic.partial.json")
+        checkpointDir = File(dir, "streaming_catalog_subsonic.partial")
     }
 
     @After
@@ -39,15 +39,25 @@ class ResumableLibraryFetchTest {
         dir.deleteRecursively()
     }
 
+    private fun fetcher(clock: () -> Long = System::currentTimeMillis) =
+        ResumableLibraryFetch(checkpointDir, writer, clock = clock)
+
+    private fun pageFiles() = checkpointDir.listFiles { f -> f.name.startsWith("page-") }.orEmpty().sortedBy { it.name }
+
     /**
-     * Pretends to be the server's album list: [PAGES] pages of [PAGE_SIZE] albums with one song
+     * Pretends to be the server's album list: [pages] pages of [PAGE_SIZE] albums with one song
      * each, fetched page by page like SubsonicApiClient.fetchLibrarySongs. Records the pages it
      * fetched; after [stallAfterPages] pages it hangs until cancelled (the app being killed).
      */
-    private class FakeServer(private val stallAfterPages: Int = Int.MAX_VALUE) : ResumableLibraryFetch.PagedFetch {
+    private open inner class FakeServer(
+        private val stallAfterPages: Int = Int.MAX_VALUE,
+        private val pages: Int = PAGES
+    ) : ResumableLibraryFetch.PagedFetch {
         val fetchedPages: MutableList<Int> = Collections.synchronizedList(mutableListOf())
         val pagesCheckpointed = CompletableDeferred<Unit>()
-        var startOffsets = mutableListOf<Int>()
+        val startOffsets = mutableListOf<Int>()
+
+        open suspend fun afterPage(page: Int) = Unit
 
         override suspend fun fetch(
             startAlbumOffset: Int,
@@ -59,7 +69,7 @@ class ResumableLibraryFetchTest {
             val songs = mutableListOf<ProviderSong>()
             var offset = startAlbumOffset
             var pagesThisRun = 0
-            while (offset < PAGES * PAGE_SIZE && songs.size < limit) {
+            while (offset < pages * PAGE_SIZE && songs.size < limit) {
                 if (pagesThisRun == stallAfterPages) {
                     pagesCheckpointed.complete(Unit)
                     awaitCancellation()
@@ -70,55 +80,98 @@ class ResumableLibraryFetchTest {
                 offset += PAGE_SIZE
                 pagesThisRun++
                 onPage(page, offset)
+                afterPage(offset / PAGE_SIZE - 1)
             }
             return Result.success(songs.take(limit))
         }
     }
 
-    /** Checkpoints after every page, so the tests see each one. */
-    private fun fetcher(intervalMs: Long = 0L, clock: () -> Long = System::currentTimeMillis) =
-        ResumableLibraryFetch(checkpointFile, writer, minCheckpointIntervalMs = intervalMs, clock = clock)
-
-    @Test
-    fun killedFetchResumesWithoutRefetchingCompletedPages() = runBlocking {
-        // First run: two pages are fetched and checkpointed, then the app is killed.
-        val first = FakeServer(stallAfterPages = 2)
-        val job = launch(Dispatchers.IO) {
-            fetcher().fetch(LAST_MODIFIED, LIMIT, null, first)
-        }
+    private suspend fun killAfter(pages: Int, lastModified: Long = LAST_MODIFIED) = kotlinx.coroutines.coroutineScope {
+        val first = FakeServer(stallAfterPages = pages)
+        val job = launch(Dispatchers.IO) { fetcher().fetch(lastModified, LIMIT, null, first) }
         first.pagesCheckpointed.await()
         job.cancelAndJoin()
-        assertEquals(listOf(0, 1), first.fetchedPages)
-        assertTrue(checkpointFile.exists())
+        first
+    }
 
-        // Restart: a new instance continues at page 2 and returns the whole library.
+    @Test
+    fun killedFetchResumesFromPageFilesWithoutRefetchingThem() = runBlocking {
+        val first = killAfter(pages = 2)
+        assertEquals(listOf(0, 1), first.fetchedPages)
+        assertEquals(2, pageFiles().size)
+
+        // Restart: a new instance reads the two page files and continues at page 2.
         val second = FakeServer()
-        val songs = fetcher()
-            .fetch(LAST_MODIFIED, LIMIT, null, second)
-            .getOrThrow()
+        val songs = fetcher().fetch(LAST_MODIFIED, LIMIT, null, second).getOrThrow()
 
         assertEquals(listOf(2 * PAGE_SIZE), second.startOffsets)
         assertEquals(listOf(2, 3, 4), second.fetchedPages)
         assertEquals((0 until PAGES * PAGE_SIZE).map { song(it) }, songs)
-        assertFalse("checkpoint must be deleted after a complete fetch", checkpointFile.exists())
+        assertFalse("checkpoint must be deleted after a complete fetch", checkpointDir.exists())
+    }
+
+    @Test
+    fun bytesWrittenPerPageDoNotGrowWithTheLibrary() = runBlocking {
+        val perPageWrites = mutableListOf<Long>()
+        val snapshots = mutableListOf<Map<String, Long>>()
+        val server = object : FakeServer(stallAfterPages = 40, pages = 41) {
+            override suspend fun afterPage(page: Int) {
+                val files = checkpointDir.listFiles().orEmpty().associate { it.name to it.length() }
+                // What this page wrote: its own page file plus the small index.
+                perPageWrites += files.getValue("page-%08d.json".format(page * PAGE_SIZE)) + files.getValue("index.json")
+                snapshots += files
+            }
+        }
+        val job = launch(Dispatchers.IO) { fetcher().fetch(LAST_MODIFIED, LIMIT, null, server) }
+        server.pagesCheckpointed.await()
+        job.cancelAndJoin()
+
+        assertEquals(40, perPageWrites.size)
+        // Constant per page (a single growing checkpoint would make page 40 ~40x page 1).
+        assertTrue("per-page writes grew: $perPageWrites", perPageWrites.last() < perPageWrites.first() * 3 / 2)
+        // Earlier pages are never rewritten: their sizes stay as first written.
+        val first = snapshots.first().getValue("page-00000000.json")
+        assertTrue(snapshots.all { it.getValue("page-00000000.json") == first })
+        // Total on disk is linear in the number of pages.
+        val total = snapshots.last().values.sum()
+        assertTrue(total < 40L * perPageWrites.first() * 3 / 2)
     }
 
     @Test
     fun changedServerLibraryDiscardsCheckpointAndFetchesEverything() = runBlocking {
-        val first = FakeServer(stallAfterPages = 2)
-        val job = launch(Dispatchers.IO) {
-            fetcher().fetch(LAST_MODIFIED, LIMIT, null, first)
-        }
-        first.pagesCheckpointed.await()
-        job.cancelAndJoin()
+        killAfter(pages = 2)
 
         val second = FakeServer()
-        val songs = fetcher()
-            .fetch(LAST_MODIFIED + 1, LIMIT, null, second)
-            .getOrThrow()
+        val songs = fetcher().fetch(LAST_MODIFIED + 1, LIMIT, null, second).getOrThrow()
 
         assertEquals(listOf(0), second.startOffsets)
         assertEquals(listOf(0, 1, 2, 3, 4), second.fetchedPages)
+        assertEquals(PAGES * PAGE_SIZE, songs.size)
+    }
+
+    @Test
+    fun pageWrittenWithoutItsIndexIsFetchedAgain() = runBlocking {
+        killAfter(pages = 2)
+        // A kill between writing page 2 and its index leaves a page the index does not cover.
+        File(checkpointDir, "page-%08d.json".format(2 * PAGE_SIZE)).writeText("""[{"providerId":"stale"}]""")
+
+        val second = FakeServer()
+        val songs = fetcher().fetch(LAST_MODIFIED, LIMIT, null, second).getOrThrow()
+
+        assertEquals(listOf(2 * PAGE_SIZE), second.startOffsets)
+        assertTrue(songs.none { it.providerId == "stale" })
+        assertEquals(PAGES * PAGE_SIZE, songs.size)
+    }
+
+    @Test
+    fun corruptPageDiscardsTheCheckpoint() = runBlocking {
+        killAfter(pages = 2)
+        File(checkpointDir, "page-%08d.json".format(PAGE_SIZE)).writeText("not json")
+
+        val second = FakeServer()
+        val songs = fetcher().fetch(LAST_MODIFIED, LIMIT, null, second).getOrThrow()
+
+        assertEquals(listOf(0), second.startOffsets)
         assertEquals(PAGES * PAGE_SIZE, songs.size)
     }
 
@@ -132,77 +185,55 @@ class ResumableLibraryFetchTest {
         val result = fetcher().fetch(LAST_MODIFIED, LIMIT, null, failing)
 
         assertTrue(result.isFailure)
-        assertTrue(checkpointFile.exists())
+        assertEquals(1, pageFiles().size)
+        assertTrue(File(checkpointDir, "index.json").exists())
     }
 
     @Test
     fun unknownLastModifiedNeitherCheckpointsNorResumes() = runBlocking {
-        val server = FakeServer()
-        val songs = fetcher()
-            .fetch(null, LIMIT, null, server)
-            .getOrThrow()
+        val songs = fetcher().fetch(null, LIMIT, null, FakeServer()).getOrThrow()
 
         assertEquals(PAGES * PAGE_SIZE, songs.size)
-        assertFalse(checkpointFile.exists())
+        assertFalse(checkpointDir.exists())
     }
 
     @Test
     fun resumedSongsCountTowardsTheLimitAndProgress() = runBlocking {
-        val first = FakeServer(stallAfterPages = 1)
-        val job = launch(Dispatchers.IO) {
-            fetcher().fetch(LAST_MODIFIED, LIMIT, null, first)
-        }
-        first.pagesCheckpointed.await()
-        job.cancelAndJoin()
+        killAfter(pages = 1)
 
         var lastReportedSongs = 0
-        val second = object : ResumableLibraryFetch.PagedFetch {
-            override suspend fun fetch(
-                startAlbumOffset: Int,
-                limit: Int,
-                onProgress: ((current: Int, total: Int, songsCount: Int) -> Unit)?,
-                onPage: suspend (pageSongs: List<ProviderSong>, nextAlbumOffset: Int) -> Unit
-            ): Result<List<ProviderSong>> {
-                assertEquals(150 - PAGE_SIZE, limit)
-                val page = (startAlbumOffset until startAlbumOffset + limit).map { song(it) }
-                onProgress?.invoke(1, 1, page.size)
-                return Result.success(page)
-            }
+        val second = ResumableLibraryFetch.PagedFetch { start, limit, onProgress, _ ->
+            assertEquals(150 - PAGE_SIZE, limit)
+            val page = (start until start + limit).map { song(it) }
+            onProgress?.invoke(1, 1, page.size)
+            Result.success(page)
         }
-        val songs = fetcher()
-            .fetch(LAST_MODIFIED, 150, { _, _, count -> lastReportedSongs = count }, second)
-            .getOrThrow()
+        val songs = fetcher().fetch(LAST_MODIFIED, 150, { _, _, count -> lastReportedSongs = count }, second).getOrThrow()
 
         assertEquals(150, songs.size)
         assertEquals(150, lastReportedSongs)
     }
 
     @Test
-    fun checkpointsAreThrottled() = runBlocking {
+    fun progressIsThrottled() = runBlocking {
         var now = 0L
-        var writes = 0
-        val server = ResumableLibraryFetch.PagedFetch { start, _, _, onPage ->
-            for (page in 0 until PAGES) {
-                onPage((page * PAGE_SIZE until (page + 1) * PAGE_SIZE).map { song(it) }, (page + 1) * PAGE_SIZE)
-                if (checkpointFile.exists()) {
-                    writes++
-                    checkpointFile.delete()
-                }
-                now += 4_000L // each page takes 4 s
-            }
+        var reports = 0
+        val server = ResumableLibraryFetch.PagedFetch { _, _, onProgress, _ ->
+            // 100 albums in 1 s: one progress call every 10 ms.
+            repeat(100) { onProgress?.invoke(it + 1, 100, it + 1); now += 10 }
             Result.success(emptyList())
         }
 
-        fetcher(intervalMs = 10_000L, clock = { now }).fetch(LAST_MODIFIED, LIMIT, null, server)
+        fetcher(clock = { now }).fetch(LAST_MODIFIED, LIMIT, { _, _, _ -> reports++ }, server)
 
-        // Pages at 0, 4, 8, 12, 16 s: checkpoints at 0 and 12 s only.
-        assertEquals(2, writes)
+        // At most one report per 500 ms: at 0 and 500 ms.
+        assertEquals(2, reports)
     }
 
     private companion object {
         const val PAGES = 5
         const val PAGE_SIZE = 100
-        const val LIMIT = 5_000
+        const val LIMIT = 50_000
         const val LAST_MODIFIED = 1_700_000_000_000L
 
         fun song(index: Int) = ProviderSong(

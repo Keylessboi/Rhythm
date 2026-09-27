@@ -738,6 +738,9 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
             _isLoading.value = true
             val serviceName = getSourceTypeName(_currentService.value)
 
+            // The cache loads in the background at start-up; wait for it (showing the loading state).
+            repository.awaitCatalogCacheLoaded()
+
             // Fast path: if not forced and cache exists, load immediately from disk without network sync or notifications
             if (!forceSync && repository.hasCachedCatalog()) {
                 try {

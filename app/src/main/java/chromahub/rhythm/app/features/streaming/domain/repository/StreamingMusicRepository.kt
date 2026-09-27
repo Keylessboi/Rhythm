@@ -285,4 +285,9 @@ interface StreamingMusicRepository : MusicRepository {
      * Checks if there is a cached catalog available on disk or in memory for the given service.
      */
     fun hasCachedCatalog(serviceId: String? = null): Boolean
+
+    /**
+     * Suspends until the catalog cache has been loaded from disk (in the background) at start-up.
+     */
+    suspend fun awaitCatalogCacheLoaded()
 }

@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.drop
 
 /**
  * Data model for persisting the streaming catalog to disk.
@@ -121,15 +122,23 @@ class StreamingMusicRepositoryImpl(
     private val gson = com.google.gson.Gson()
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /** The catalog cache is loaded on IO, never where the repository is created (main thread). */
+    private val initialCatalogLoad: BackgroundLoad
+
     init {
         loadDownloadedSongsIndex()
-        loadCatalogCacheForActiveService()
+        // Started here, once the fields the load uses are initialized.
+        initialCatalogLoad = BackgroundLoad(repositoryScope) { loadCatalogCacheForActiveService() }
         repositoryScope.launch {
-            appSettings.streamingService.collect { serviceId ->
+            initialCatalogLoad.await()
+            // The current service was just loaded; reload only when it changes.
+            appSettings.streamingService.drop(1).collect { serviceId ->
                 loadCatalogCacheForActiveService(normalizeServiceId(serviceId))
             }
         }
     }
+
+    override suspend fun awaitCatalogCacheLoaded() = initialCatalogLoad.await()
 
     private fun loadDownloadedSongsIndex() {
         try {
@@ -1425,6 +1434,8 @@ class StreamingMusicRepositoryImpl(
         limit: Int,
         onProgress: ((current: Int, total: Int, songsCount: Int) -> Unit)?
     ): List<StreamingSong> {
+        // Never let the cache load finish after (and overwrite) a newly synced catalog.
+        initialCatalogLoad.await()
         if (appSettings.offlineMode.value) {
             val downloadedList = downloadedSongsMap.values.toList()
             replaceCatalog(downloadedList)

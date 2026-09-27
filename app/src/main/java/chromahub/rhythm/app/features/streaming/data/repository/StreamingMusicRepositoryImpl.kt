@@ -61,6 +61,18 @@ data class StreamingCatalogCache(
 )
 
 /**
+ * Catalog cache file I/O. The JSON is streamed: a large library's cache is tens of MB (about
+ * 1 KB per song), too much to build or parse as one String on a phone heap.
+ */
+internal fun com.google.gson.Gson.writeCatalogCache(file: java.io.File, cache: StreamingCatalogCache) {
+    file.bufferedWriter().use { toJson(cache, it) }
+}
+
+internal fun com.google.gson.Gson.readCatalogCache(file: java.io.File): StreamingCatalogCache? {
+    return file.bufferedReader().use { fromJson(it, StreamingCatalogCache::class.java) }
+}
+
+/**
  * Provider-backed implementation used by Rhythm GO mode.
  */
 class StreamingMusicRepositoryImpl(
@@ -230,8 +242,7 @@ class StreamingMusicRepositoryImpl(
             val cacheFile = getCatalogCacheFile(serviceId)
             if (!cacheFile.exists()) return
 
-            val json = cacheFile.readText()
-            val cache = gson.fromJson(json, StreamingCatalogCache::class.java) ?: return
+            val cache = gson.readCatalogCache(cacheFile) ?: return
             if (cache.serviceId != serviceId) return
 
             if (cache.songs.isNotEmpty()) {
@@ -301,7 +312,7 @@ class StreamingMusicRepositoryImpl(
                 )
 
                 val cacheFile = getCatalogCacheFile(serviceId)
-                cacheFile.writeText(gson.toJson(cache))
+                gson.writeCatalogCache(cacheFile, cache)
                 Log.d("StreamingMusicRepo", "Saved streaming catalog cache for $serviceId (${currentSongs.size} songs)")
             } catch (e: Exception) {
                 Log.e("StreamingMusicRepo", "Error saving streaming catalog cache for $serviceId", e)

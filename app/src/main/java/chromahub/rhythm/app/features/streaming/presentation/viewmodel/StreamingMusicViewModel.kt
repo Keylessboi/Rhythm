@@ -23,6 +23,7 @@ import chromahub.rhythm.app.features.streaming.domain.model.StreamingPlaylist
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingServiceId
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingServiceRules
 import chromahub.rhythm.app.features.streaming.domain.model.StreamingSong
+import chromahub.rhythm.app.features.streaming.domain.repository.StreamingMusicRepository
 import chromahub.rhythm.app.features.streaming.infrastructure.notification.StreamingNotificationManager
 import chromahub.rhythm.app.shared.data.model.AppSettings
 import chromahub.rhythm.app.util.ArtistSeparator
@@ -810,7 +811,7 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
 
                 // 2. Pull the provider catalog with live progress callbacks
                 try {
-                    repository.syncCatalog(limit = 5_000) { current, total, songCount ->
+                    repository.syncCatalog(limit = StreamingMusicRepository.MAX_LIBRARY_SONGS) { current, total, songCount ->
                         _syncProgress.value = StreamingSyncProgress(
                             isSyncing = true,
                             current = current,

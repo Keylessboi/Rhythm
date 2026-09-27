@@ -285,7 +285,7 @@ class StreamingMusicRepositoryImpl(
                 var songCount = 0
                 // Saves run one at a time and snapshot the catalog inside the writer's lock,
                 // so overlapping saves cannot corrupt the file and the last one wins.
-                val saved = catalogCacheWriter.write(getCatalogCacheFile(serviceId)) {
+                val saved = catalogCacheWriter.write(getCatalogCacheFile(serviceId), snapshot = {
                     val currentSongs = songsFlow.value.filterIsInstance<StreamingSong>()
                     if (currentSongs.isEmpty()) return@write null
 
@@ -305,8 +305,8 @@ class StreamingMusicRepositoryImpl(
                         lastSyncTimestamp = System.currentTimeMillis()
                     )
                     songCount = currentSongs.size
-                    gson.toJson(cache)
-                }
+                    cache
+                }) { cache, out -> gson.toJson(cache, out) }
                 if (saved) {
                     Log.d("StreamingMusicRepo", "Saved streaming catalog cache for $serviceId ($songCount songs)")
                 }

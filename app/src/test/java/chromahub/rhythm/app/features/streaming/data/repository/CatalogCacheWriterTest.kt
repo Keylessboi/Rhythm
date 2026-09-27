@@ -46,6 +46,8 @@ class CatalogCacheWriterTest {
         )
     )
 
+    private fun writeText(text: String, out: java.io.Writer) = out.write(text)
+
     @Test
     fun concurrentSaves_leaveOneCompleteReadableFile() = runBlocking {
         val writer = CatalogCacheWriter()
@@ -54,9 +56,10 @@ class CatalogCacheWriterTest {
 
         (1..64).map { n ->
             async(Dispatchers.IO) {
-                writer.write(file) {
+                writer.write(file, { payload(n) }) { text, out ->
                     maxInside.accumulateAndGet(inside.incrementAndGet(), ::maxOf)
-                    payload(n).also { inside.decrementAndGet() }
+                    out.write(text)
+                    inside.decrementAndGet()
                 }
             }
         }.awaitAll()
@@ -73,18 +76,18 @@ class CatalogCacheWriterTest {
     fun write_replacesExistingFileAndSkipsNullContent() = runBlocking {
         val writer = CatalogCacheWriter()
 
-        assertTrue(writer.write(file) { payload(1) })
-        assertTrue(writer.write(file) { payload(2) })
+        assertTrue(writer.write(file, { payload(1) }, ::writeText))
+        assertTrue(writer.write(file, { payload(2) }, ::writeText))
         assertEquals(payload(2), file.readText())
 
-        assertFalse(writer.write(file) { null })
+        assertFalse(writer.write(file, { null }, ::writeText))
         assertEquals(payload(2), file.readText())
     }
 
     @Test
     fun delete_removesFile() = runBlocking {
         val writer = CatalogCacheWriter()
-        writer.write(file) { payload(1) }
+        writer.write(file, { payload(1) }, ::writeText)
 
         assertTrue(writer.delete(file))
         assertFalse(file.exists())

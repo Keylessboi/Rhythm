@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.IOException
+import java.io.Writer
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -18,23 +19,29 @@ import java.nio.file.StandardCopyOption
  *
  * A sync triggers several saves in quick succession (catalog, playlists, artist images). Without
  * this, they write the same file concurrently and can leave interleaved or truncated JSON, which
- * the next start cannot read. Here, [content] is produced inside the lock, so the last save
- * always writes the latest state. The JSON goes to a temp file that is then moved over the
- * target, so a reader (or a process kill mid-write) never sees a half-written file.
+ * the next start cannot read. Here, the snapshot is taken inside the lock, so the last save
+ * always writes the latest state. It is streamed to a temp file (a large library's JSON is
+ * tens of MB, too much to build as one String) that is then moved over the target, so a
+ * reader (or a process kill mid-write) never sees a half-written file.
  */
 internal class CatalogCacheWriter {
 
     private val mutex = Mutex()
 
     /**
-     * Writes the text returned by [content] to [file]; writes nothing if it returns null.
+     * Takes a [snapshot] and streams it to [file] with [serialize]; writes nothing if the
+     * snapshot is null.
      * @return true if the file was written.
      */
-    suspend fun write(file: File, content: () -> String?): Boolean = mutex.withLock {
-        val text = content() ?: return@withLock false
+    suspend fun <T : Any> write(
+        file: File,
+        snapshot: () -> T?,
+        serialize: (T, Writer) -> Unit
+    ): Boolean = mutex.withLock {
+        val content = snapshot() ?: return@withLock false
         val tempFile = File(file.parentFile, "${file.name}.tmp")
         try {
-            tempFile.writeText(text)
+            tempFile.bufferedWriter().use { serialize(content, it) }
             moveReplacing(tempFile, file)
         } catch (e: IOException) {
             tempFile.delete()

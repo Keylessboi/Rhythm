@@ -46,8 +46,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Data model for persisting the streaming catalog to disk.
@@ -113,8 +111,17 @@ class StreamingMusicRepositoryImpl(
     private val gson = com.google.gson.Gson()
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /** Serialises catalog syncs; several start-up triggers can request one at the same time. */
-    private val catalogSyncMutex = Mutex()
+    /**
+     * One catalog sync at a time: several triggers (start-up, network changes, screens) can
+     * request one together, and a request that arrives during a sync joins it.
+     */
+    private val catalogSync = SingleFlight<List<StreamingSong>>()
+
+    /** The cold-start library change check ([isCatalogOutdated]) runs once per process. */
+    private val coldStartCatalogCheck = OnceGate()
+
+    /** Skips rewriting the catalog cache when its content did not change. */
+    private val catalogSaveFilter = CatalogSaveFilter()
 
     /**
      * Server library marker ([SubsonicApiClient.getLibraryMarker]) of the catalog in memory, or
@@ -256,6 +263,7 @@ class StreamingMusicRepositoryImpl(
                 }
                 songsFlow.value = cache.songs
                 catalogLibraryMarker = cache.libraryMarker
+                catalogSaveFilter.remember(cache)
 
                 if (cache.albums.isNotEmpty()) {
                     providerAlbumCache.clear()
@@ -316,9 +324,13 @@ class StreamingMusicRepositoryImpl(
                     lastSyncTimestamp = System.currentTimeMillis(),
                     libraryMarker = catalogLibraryMarker
                 )
+                // Syncs that change nothing (library unchanged, same playlists and artists)
+                // would otherwise rewrite the whole multi-megabyte cache several times each.
+                if (!catalogSaveFilter.hasChanged(cache)) return@launch
 
                 val cacheFile = getCatalogCacheFile(serviceId)
                 cacheFile.writeText(gson.toJson(cache))
+                catalogSaveFilter.remember(cache)
                 Log.d("StreamingMusicRepo", "Saved streaming catalog cache for $serviceId (${currentSongs.size} songs)")
             } catch (e: Exception) {
                 Log.e("StreamingMusicRepo", "Error saving streaming catalog cache for $serviceId", e)
@@ -372,6 +384,7 @@ class StreamingMusicRepositoryImpl(
             if (cacheFile.exists()) {
                 cacheFile.delete()
             }
+            catalogSaveFilter.remember(null)
         } catch (e: Exception) {
             Log.e("StreamingMusicRepo", "Error deleting catalog cache on disconnect", e)
         }
@@ -1431,9 +1444,8 @@ class StreamingMusicRepositoryImpl(
         limit: Int,
         onProgress: ((current: Int, total: Int, songsCount: Int) -> Unit)?
     ): List<StreamingSong> {
-        // Run syncs one at a time, so a queued sync can see that the previous one already
-        // fetched the current library instead of fetching it again.
-        return catalogSyncMutex.withLock { syncCatalogLocked(limit, onProgress) }
+        // Never queue a second sync behind a running one: join it and share its result.
+        return catalogSync.run { syncCatalogLocked(limit, onProgress) }
     }
 
     override suspend fun isCatalogOutdated(): Boolean {
@@ -1442,6 +1454,9 @@ class StreamingMusicRepositoryImpl(
         // manual refresh. A server that cannot vouch for its library (no lastModified, scan
         // running) is treated the same way rather than triggering a full fetch on every start.
         if (activeServiceId() != StreamingServiceId.SUBSONIC || !subsonicClient.isConnected()) return false
+        // Once per process: the cached-start path runs on every library screen load, and a
+        // sync it starts must not trigger further checks while the marker is still stale.
+        if (!coldStartCatalogCheck.tryEnter()) return false
         val serverMarker = subsonicClient.getLibraryMarker() ?: return false
         return serverMarker != catalogLibraryMarker
     }

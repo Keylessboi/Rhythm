@@ -73,7 +73,6 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var networkLostJob: Job? = null
     private var networkAvailableJob: Job? = null
-    private var catalogCheckJob: Job? = null
     private val authMutex = Mutex()
     private var lastSuccessfulAuthTimestamp = 0L
 
@@ -730,11 +729,11 @@ class StreamingMusicViewModel(application: Application) : AndroidViewModel(appli
     
     /**
      * The disk cache may predate a server-side library change: check cheaply in the background
-     * and run the full sync only if the library did change.
+     * and run the full sync only if the library did change. The repository runs the check once
+     * per process, so repeated cached loads (e.g. while that sync runs) do not start more syncs.
      */
     private fun checkCachedCatalogInBackground() {
-        if (catalogCheckJob?.isActive == true) return
-        catalogCheckJob = viewModelScope.launch {
+        viewModelScope.launch {
             val outdated = try { repository.isCatalogOutdated() } catch (e: Exception) { false }
             if (outdated) {
                 Log.d("StreamingMusicViewModel", "Server library changed since the cached catalog; syncing")

@@ -75,12 +75,16 @@ class ResumableLibraryFetchTest {
         }
     }
 
+    /** Checkpoints after every page, so the tests see each one. */
+    private fun fetcher(intervalMs: Long = 0L, clock: () -> Long = System::currentTimeMillis) =
+        ResumableLibraryFetch(checkpointFile, writer, minCheckpointIntervalMs = intervalMs, clock = clock)
+
     @Test
     fun killedFetchResumesWithoutRefetchingCompletedPages() = runBlocking {
         // First run: two pages are fetched and checkpointed, then the app is killed.
         val first = FakeServer(stallAfterPages = 2)
         val job = launch(Dispatchers.IO) {
-            ResumableLibraryFetch(checkpointFile, writer).fetch(LAST_MODIFIED, LIMIT, null, first)
+            fetcher().fetch(LAST_MODIFIED, LIMIT, null, first)
         }
         first.pagesCheckpointed.await()
         job.cancelAndJoin()
@@ -89,7 +93,7 @@ class ResumableLibraryFetchTest {
 
         // Restart: a new instance continues at page 2 and returns the whole library.
         val second = FakeServer()
-        val songs = ResumableLibraryFetch(checkpointFile, writer)
+        val songs = fetcher()
             .fetch(LAST_MODIFIED, LIMIT, null, second)
             .getOrThrow()
 
@@ -103,13 +107,13 @@ class ResumableLibraryFetchTest {
     fun changedServerLibraryDiscardsCheckpointAndFetchesEverything() = runBlocking {
         val first = FakeServer(stallAfterPages = 2)
         val job = launch(Dispatchers.IO) {
-            ResumableLibraryFetch(checkpointFile, writer).fetch(LAST_MODIFIED, LIMIT, null, first)
+            fetcher().fetch(LAST_MODIFIED, LIMIT, null, first)
         }
         first.pagesCheckpointed.await()
         job.cancelAndJoin()
 
         val second = FakeServer()
-        val songs = ResumableLibraryFetch(checkpointFile, writer)
+        val songs = fetcher()
             .fetch(LAST_MODIFIED + 1, LIMIT, null, second)
             .getOrThrow()
 
@@ -125,7 +129,7 @@ class ResumableLibraryFetchTest {
             Result.failure(java.io.IOException("connection lost"))
         }
 
-        val result = ResumableLibraryFetch(checkpointFile, writer).fetch(LAST_MODIFIED, LIMIT, null, failing)
+        val result = fetcher().fetch(LAST_MODIFIED, LIMIT, null, failing)
 
         assertTrue(result.isFailure)
         assertTrue(checkpointFile.exists())
@@ -134,7 +138,7 @@ class ResumableLibraryFetchTest {
     @Test
     fun unknownLastModifiedNeitherCheckpointsNorResumes() = runBlocking {
         val server = FakeServer()
-        val songs = ResumableLibraryFetch(checkpointFile, writer)
+        val songs = fetcher()
             .fetch(null, LIMIT, null, server)
             .getOrThrow()
 
@@ -146,7 +150,7 @@ class ResumableLibraryFetchTest {
     fun resumedSongsCountTowardsTheLimitAndProgress() = runBlocking {
         val first = FakeServer(stallAfterPages = 1)
         val job = launch(Dispatchers.IO) {
-            ResumableLibraryFetch(checkpointFile, writer).fetch(LAST_MODIFIED, LIMIT, null, first)
+            fetcher().fetch(LAST_MODIFIED, LIMIT, null, first)
         }
         first.pagesCheckpointed.await()
         job.cancelAndJoin()
@@ -165,12 +169,34 @@ class ResumableLibraryFetchTest {
                 return Result.success(page)
             }
         }
-        val songs = ResumableLibraryFetch(checkpointFile, writer)
+        val songs = fetcher()
             .fetch(LAST_MODIFIED, 150, { _, _, count -> lastReportedSongs = count }, second)
             .getOrThrow()
 
         assertEquals(150, songs.size)
         assertEquals(150, lastReportedSongs)
+    }
+
+    @Test
+    fun checkpointsAreThrottled() = runBlocking {
+        var now = 0L
+        var writes = 0
+        val server = ResumableLibraryFetch.PagedFetch { start, _, _, onPage ->
+            for (page in 0 until PAGES) {
+                onPage((page * PAGE_SIZE until (page + 1) * PAGE_SIZE).map { song(it) }, (page + 1) * PAGE_SIZE)
+                if (checkpointFile.exists()) {
+                    writes++
+                    checkpointFile.delete()
+                }
+                now += 4_000L // each page takes 4 s
+            }
+            Result.success(emptyList())
+        }
+
+        fetcher(intervalMs = 10_000L, clock = { now }).fetch(LAST_MODIFIED, LIMIT, null, server)
+
+        // Pages at 0, 4, 8, 12, 16 s: checkpoints at 0 and 12 s only.
+        assertEquals(2, writes)
     }
 
     private companion object {

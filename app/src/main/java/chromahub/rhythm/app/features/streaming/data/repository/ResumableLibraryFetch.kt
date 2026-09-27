@@ -26,15 +26,20 @@ data class LibraryFetchCheckpoint(
 
 /**
  * Runs a paged full library fetch so that it survives the app being killed or the sync being
- * cancelled: after each page the songs fetched so far are checkpointed to [checkpointFile], and
+ * cancelled: after a page the songs fetched so far are checkpointed to [checkpointFile], and
  * the next fetch continues from the first page not yet fetched instead of starting over. The
  * checkpoint is discarded when the server library changed in between (different
  * `lastModified`), and deleted once a fetch completes.
+ *
+ * Each checkpoint rewrites every song fetched so far (tens of MB for a large library), so it is
+ * written at most every [minCheckpointIntervalMs]; a kill loses at most that much work.
  */
 internal class ResumableLibraryFetch(
     private val checkpointFile: File,
     private val writer: CatalogCacheWriter,
-    private val gson: Gson = Gson()
+    private val gson: Gson = Gson(),
+    private val minCheckpointIntervalMs: Long = 10_000L,
+    private val clock: () -> Long = System::currentTimeMillis
 ) {
 
     /** One paged fetch starting at `startAlbumOffset`, reporting each page to `onPage`. */
@@ -71,6 +76,7 @@ internal class ResumableLibraryFetch(
             return Result.success(fetched.values.take(limit))
         }
 
+        var lastCheckpointAt = Long.MIN_VALUE
         val result = pagedFetch.fetch(
             startAlbumOffset = checkpoint?.nextAlbumOffset ?: 0,
             limit = limit - resumedCount,
@@ -79,9 +85,11 @@ internal class ResumableLibraryFetch(
             }
         ) { pageSongs, nextAlbumOffset ->
             pageSongs.forEach { fetched.putIfAbsent(it.providerId, it) }
-            if (lastModified != null) {
+            val now = clock()
+            if (lastModified != null && (lastCheckpointAt == Long.MIN_VALUE || now - lastCheckpointAt >= minCheckpointIntervalMs)) {
+                lastCheckpointAt = now
                 val snapshot = LibraryFetchCheckpoint(lastModified, nextAlbumOffset, fetched.values.toList())
-                writer.write(checkpointFile) { gson.toJson(snapshot) }
+                writer.write(checkpointFile, { snapshot }) { checkpoint, out -> gson.toJson(checkpoint, out) }
             }
         }
 
@@ -96,7 +104,7 @@ internal class ResumableLibraryFetch(
     private fun readCheckpoint(): LibraryFetchCheckpoint? {
         if (!checkpointFile.exists()) return null
         return try {
-            gson.fromJson(checkpointFile.readText(), LibraryFetchCheckpoint::class.java)
+            checkpointFile.bufferedReader().use { gson.fromJson(it, LibraryFetchCheckpoint::class.java) }
                 // Gson leaves missing fields null despite the Kotlin types; treat that as corrupt.
                 ?.takeIf { it.songs.all { song -> song.providerId.isNotEmpty() } && it.nextAlbumOffset > 0 }
         } catch (e: Exception) {

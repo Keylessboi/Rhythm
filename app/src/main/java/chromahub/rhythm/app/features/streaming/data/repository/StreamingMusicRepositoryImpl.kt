@@ -110,6 +110,12 @@ class StreamingMusicRepositoryImpl(
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val catalogCacheWriter = CatalogCacheWriter()
 
+    /**
+     * A sync or start-up requests several saves within seconds (catalog, liked songs, playlists,
+     * artist images); each rewrites the whole cache, tens of MB for a large library. Merge them.
+     */
+    private val catalogSaveCoalescer = SaveCoalescer(repositoryScope, delayMs = 3_000L)
+
     init {
         loadDownloadedSongsIndex()
         loadCatalogCacheForActiveService()
@@ -280,7 +286,7 @@ class StreamingMusicRepositoryImpl(
 
     private fun saveCatalogCache(serviceId: String = activeServiceId()) {
         if (appSettings.offlineMode.value) return
-        repositoryScope.launch(Dispatchers.IO) {
+        catalogSaveCoalescer.request(serviceId) {
             try {
                 var songCount = 0
                 // Saves run one at a time and snapshot the catalog inside the writer's lock,

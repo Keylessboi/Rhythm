@@ -6,7 +6,11 @@
 package chromahub.rhythm.app.features.streaming.data.repository
 
 import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
@@ -91,5 +95,49 @@ class CatalogCacheWriterTest {
 
         assertTrue(writer.delete(file))
         assertFalse(file.exists())
+    }
+
+    @Test
+    fun coalescer_mergesABurstIntoOneSaveOfTheLatestState() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        try {
+            val coalescer = SaveCoalescer(scope, delayMs = 200)
+            val saves = AtomicInteger(0)
+            val state = AtomicInteger(0)
+            val saved = mutableListOf<Int>()
+
+            repeat(10) {
+                state.set(it)
+                coalescer.request("subsonic") { saves.incrementAndGet(); synchronized(saved) { saved += state.get() } }
+            }
+            delay(600)
+            assertEquals(1, saves.get())
+            assertEquals(listOf(9), saved)
+
+            // A later request is saved again.
+            state.set(42)
+            coalescer.request("subsonic") { saves.incrementAndGet(); synchronized(saved) { saved += state.get() } }
+            delay(600)
+            assertEquals(listOf(9, 42), saved)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun coalescer_keepsKeysSeparate() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        try {
+            val coalescer = SaveCoalescer(scope, delayMs = 100)
+            val saves = AtomicInteger(0)
+
+            coalescer.request("subsonic") { saves.incrementAndGet() }
+            coalescer.request("jellyfin") { saves.incrementAndGet() }
+            delay(400)
+
+            assertEquals(2, saves.get())
+        } finally {
+            scope.cancel()
+        }
     }
 }

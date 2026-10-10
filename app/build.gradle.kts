@@ -270,6 +270,7 @@ dependencies {
     //noinspection GradleDependency
     implementation(libs.androidx.compose.animation.graphics)
     implementation(libs.androidx.compose.animation.core)
+    implementation(libs.reorderables)
     
     // Navigation
     implementation(libs.androidx.navigation.compose)

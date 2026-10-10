@@ -61,6 +61,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.SheetValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -246,6 +254,7 @@ fun QueueBottomSheet(
     sheetState: SheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val appSettings = remember(context) { AppSettings.getInstance(context) }
     val hidePlayedQueueSongs by appSettings.hidePlayedQueueSongs.collectAsState()
     val gestureQueueSwipeToRemove by appSettings.gestureQueueSwipeToRemove.collectAsState()
@@ -276,14 +285,29 @@ fun QueueBottomSheet(
 
     val keyTracker = remember { QueueEntryKeyTracker<Song> { it.id } }
     var localQueueEntries by remember { mutableStateOf(keyTracker.sync(queue)) }
-    var isActivelyDragging by remember { mutableStateOf(false) }
-    var dragSnapshotEntries by remember { mutableStateOf<List<QueueEntry<Song>>?>(null) }
-    var dragStartQueueIndex by remember { mutableIntStateOf(-1) }
-    var dragStartEntryId by remember { mutableLongStateOf(-1L) }
+    var reorderHandleInUse by remember { mutableStateOf(false) }
+    var pendingReorderExpectedIds by remember { mutableStateOf<List<String>?>(null) }
+    var pendingReorderGraceUpdates by remember { mutableIntStateOf(0) }
+    var lastMovedFrom by remember { mutableStateOf<Int?>(null) }
+    var lastMovedTo by remember { mutableStateOf<Int?>(null) }
 
-    // Sync from incoming queue when not dragging
     LaunchedEffect(queue) {
-        if (!isActivelyDragging) {
+        if (reorderHandleInUse) return@LaunchedEffect
+        val expectedIds = pendingReorderExpectedIds
+        if (expectedIds != null) {
+            val currentIds = queue.map { it.id }
+            if (currentIds == expectedIds) {
+                pendingReorderExpectedIds = null
+                pendingReorderGraceUpdates = 0
+                localQueueEntries = keyTracker.sync(queue)
+            } else if (pendingReorderGraceUpdates > 0) {
+                pendingReorderGraceUpdates -= 1
+            } else {
+                pendingReorderExpectedIds = null
+                pendingReorderGraceUpdates = 0
+                localQueueEntries = keyTracker.sync(queue)
+            }
+        } else {
             localQueueEntries = keyTracker.sync(queue)
         }
     }
@@ -435,6 +459,79 @@ fun QueueBottomSheet(
                         }
                     }
 
+                    val reorderableState = rememberReorderableLazyListState(
+                        lazyListState = lazyListState,
+                        onMove = { from, to ->
+                            val fromRow = (queueListRows.firstOrNull { queueListRowKey(it) == from.key } as? QueueListRow.Song)?.row
+                                ?: return@rememberReorderableLazyListState
+                            val toRow = (queueListRows.firstOrNull { queueListRowKey(it) == to.key } as? QueueListRow.Song)?.row
+                                ?: return@rememberReorderableLazyListState
+
+                            if (fromRow.isPlayed || toRow.isPlayed) return@rememberReorderableLazyListState
+                            if (fromRow.queueIndex == toRow.queueIndex) return@rememberReorderableLazyListState
+                            if (fromRow.queueIndex !in localQueueEntries.indices || toRow.queueIndex !in localQueueEntries.indices) return@rememberReorderableLazyListState
+
+                            if (lastMovedFrom == null) {
+                                lastMovedFrom = fromRow.queueIndex
+                            }
+                            lastMovedTo = toRow.queueIndex
+
+                            val updated = localQueueEntries.toMutableList()
+                            val moved = updated.removeAt(fromRow.queueIndex)
+                            updated.add(toRow.queueIndex, moved)
+                            keyTracker.updateEntries(updated)
+                            localQueueEntries = updated
+                        }
+                    )
+
+                    val isReordering by remember {
+                        derivedStateOf { reorderableState.isAnyItemDragging }
+                    }
+                    val updatedIsReordering by rememberUpdatedState(isReordering)
+                    val updatedReorderHandleInUse by rememberUpdatedState(reorderHandleInUse)
+
+                    var wasDragging by remember { mutableStateOf(false) }
+
+                    LaunchedEffect(isReordering) {
+                        if (wasDragging && !isReordering) {
+                            wasDragging = false
+                            val fromIndex = lastMovedFrom
+                            val toIndex = lastMovedTo
+                            lastMovedFrom = null
+                            lastMovedTo = null
+
+                            if (fromIndex != null && toIndex != null && fromIndex != toIndex) {
+                                val expectedIds = localQueueEntries.map { it.item.id }
+                                pendingReorderExpectedIds = expectedIds
+                                pendingReorderGraceUpdates = 6
+                                onMoveQueueItem(fromIndex, toIndex)
+                            } else {
+                                pendingReorderExpectedIds = null
+                                pendingReorderGraceUpdates = 0
+                            }
+                        } else if (isReordering) {
+                            wasDragging = true
+                        }
+                    }
+
+                    val listDragConnection = remember(updatedIsReordering, updatedReorderHandleInUse) {
+                        object : NestedScrollConnection {
+                            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                                if (updatedIsReordering || updatedReorderHandleInUse) {
+                                    return available
+                                }
+                                return Offset.Zero
+                            }
+
+                            override suspend fun onPreFling(available: Velocity): Velocity {
+                                if (updatedIsReordering || updatedReorderHandleInUse) {
+                                    return available
+                                }
+                                return Velocity.Zero
+                            }
+                        }
+                    }
+
                     AdaptiveSheetScrollContainer(
                         lazyListState = lazyListState,
                         enableBlend = !hasPlayedSection,
@@ -448,123 +545,90 @@ fun QueueBottomSheet(
                             .graphicsLayer { alpha = clearFadeAlpha }
                     ) { endPadding ->
                         val rowEndPadding = 16.dp + (endPadding * (20f / 12f))
-                        if (isShuffleEnabled) {
-                            // When shuffle is enabled, show queue but disable reordering
-                            LazyColumn(
-                                state = lazyListState,
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                itemsIndexed(
-                                    items = queueListRows,
-                                    key = { _, row -> queueListRowKey(row) }
-                                ) { index, row ->
+                        LazyColumn(
+                            state = lazyListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .nestedScroll(listDragConnection),
+                            userScrollEnabled = !(isReordering || reorderHandleInUse),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            itemsIndexed(
+                                items = queueListRows,
+                                key = { _, row -> queueListRowKey(row) }
+                            ) { index, row ->
+                                val rowKey = queueListRowKey(row)
+                                if (row is QueueListRow.Section) {
                                     QueueListRowContent(
                                         row = row,
                                         isDragging = false,
                                         reorderSupported = false,
                                         endPadding = rowEndPadding,
-                                        isRemoving = { key -> removingQueueKeys[key] == true },
-                                        enableSwipeToRemove = gestureQueueSwipeToRemove,
-                                        onSongClickAtIndex = onSongClickAtIndex,
-                                        onRequestRemove = { songRow, itemKey ->
-                                            dismissQueueRow(itemKey) { removeQueueSong(songRow.entryId) }
-                                        },
-                                        modifier = Modifier.animateItem(
-                                            fadeInSpec = tween(0),
+                                        isRemoving = { false },
+                                        enableSwipeToRemove = false,
+                                        onSongClickAtIndex = {},
+                                        onRequestRemove = { _, _ -> },
+                                        modifier = Modifier
+                                    )
+                                } else {
+                                    val songRow = (row as QueueListRow.Song).row
+                                    val canReorder = !isShuffleEnabled && !songRow.isPlayed
+
+                                    ReorderableItem(
+                                        state = reorderableState,
+                                        key = rowKey,
+                                        enabled = canReorder,
+                                        animateItemModifier = Modifier.animateItem(
+                                            fadeInSpec = tween(durationMillis = 0),
                                             placementSpec = spring(
                                                 dampingRatio = Spring.DampingRatioNoBouncy,
                                                 stiffness = Spring.StiffnessMediumLow
                                             ),
-                                            fadeOutSpec = tween(0)
+                                            fadeOutSpec = tween(durationMillis = 0)
                                         )
-                                    )
+                                    ) { isDragging ->
+                                        val scale by animateFloatAsState(
+                                            targetValue = if (isDragging) 1.02f else 1f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMediumLow
+                                            ),
+                                            label = "queueItemScale"
+                                        )
+
+                                        val handleModifier = if (canReorder) {
+                                            Modifier.draggableHandle(
+                                                onDragStarted = {
+                                                    reorderHandleInUse = true
+                                                    HapticUtils.performHapticFeedback(context, haptics, HapticType.MEDIUM)
+                                                },
+                                                onDragStopped = {
+                                                    reorderHandleInUse = false
+                                                    HapticUtils.performHapticFeedback(context, haptics, HapticType.LIGHT)
+                                                }
+                                            )
+                                        } else Modifier
+
+                                        QueueListRowContent(
+                                            row = row,
+                                            isDragging = isDragging,
+                                            reorderSupported = !isShuffleEnabled,
+                                            endPadding = rowEndPadding,
+                                            isRemoving = { key -> removingQueueKeys[key] == true },
+                                            enableSwipeToRemove = gestureQueueSwipeToRemove,
+                                            onSongClickAtIndex = onSongClickAtIndex,
+                                            dragHandleModifier = handleModifier,
+                                            onRequestRemove = { targetRow, itemKey ->
+                                                dismissQueueRow(itemKey) { removeQueueSong(targetRow.entryId) }
+                                            },
+                                            modifier = Modifier.graphicsLayer {
+                                                scaleX = scale
+                                                scaleY = scale
+                                            }
+                                        )
+                                    }
                                 }
-                            }
-                        } else {
-                            // Normal drag and drop when shuffle is disabled
-                            DragDropLazyColumn(
-                                items = queueListRows,
-                                modifier = Modifier.fillMaxWidth(),
-                                lazyListState = lazyListState,
-                                onMove = { fromIndex, toIndex ->
-                                    val fromRow = (queueListRows.getOrNull(fromIndex) as? QueueListRow.Song)?.row ?: return@DragDropLazyColumn
-                                    val toRow = (queueListRows.getOrNull(toIndex) as? QueueListRow.Song)?.row ?: return@DragDropLazyColumn
-
-                                    // Guard: cannot reorder played songs, nor swap across boundary
-                                    if (fromRow.isPlayed || toRow.isPlayed) return@DragDropLazyColumn
-                                    if (fromRow.queueIndex == toRow.queueIndex) return@DragDropLazyColumn
-                                    if (fromRow.queueIndex !in localQueueEntries.indices || toRow.queueIndex !in localQueueEntries.indices) return@DragDropLazyColumn
-
-                                    val updated = localQueueEntries.toMutableList()
-                                    val moved = updated.removeAt(fromRow.queueIndex)
-                                    updated.add(toRow.queueIndex, moved)
-                                    keyTracker.updateEntries(updated)
-                                    localQueueEntries = updated
-                                },
-                                onDragStart = { listIndex ->
-                                    val songRow = (queueListRows.getOrNull(listIndex) as? QueueListRow.Song)?.row
-                                    if (songRow != null && !songRow.isPlayed) {
-                                        isActivelyDragging = true
-                                        dragStartQueueIndex = songRow.queueIndex
-                                        dragStartEntryId = songRow.entryId
-                                        dragSnapshotEntries = localQueueEntries.toList()
-                                    }
-                                },
-                                onDrop = { fromListIndex, toListIndex ->
-                                    isActivelyDragging = false
-                                    val startIdx = dragStartQueueIndex
-                                    val entryId = dragStartEntryId
-                                    dragStartQueueIndex = -1
-                                    dragStartEntryId = -1L
-                                    dragSnapshotEntries = null
-
-                                    val targetRow = (queueListRows.getOrNull(toListIndex) as? QueueListRow.Song)?.row
-                                    val finalIdx = if (entryId != -1L) {
-                                        localQueueEntries.indexOfFirst { it.entryId == entryId }.takeIf { it >= 0 }
-                                            ?: (targetRow?.queueIndex ?: -1)
-                                    } else {
-                                        targetRow?.queueIndex ?: -1
-                                    }
-
-                                    if (startIdx >= 0 && finalIdx >= 0 && startIdx != finalIdx) {
-                                        onMoveQueueItem(startIdx, finalIdx)
-                                    }
-                                },
-                                onDragCancel = {
-                                    isActivelyDragging = false
-                                    dragStartQueueIndex = -1
-                                    dragStartEntryId = -1L
-                                    dragSnapshotEntries?.let { snapshot ->
-                                        keyTracker.updateEntries(snapshot)
-                                        localQueueEntries = snapshot
-                                    }
-                                    dragSnapshotEntries = null
-                                },
-                                itemKey = { row -> queueListRowKey(row) },
-                                isReorderableItem = { row ->
-                                    row is QueueListRow.Song && !row.row.isPlayed
-                                },
-                                isStickyHeader = { row -> row is QueueListRow.Section },
-                                contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp),
-                                itemSpacing = 4.dp,
-                                animateItemPlacement = true,
-                                dragTopInset = 24.dp,
-                                dragBottomInset = 24.dp
-                            ) { row, isDragging, _ ->
-                                QueueListRowContent(
-                                    row = row,
-                                    isDragging = isDragging,
-                                    reorderSupported = true,
-                                    endPadding = rowEndPadding,
-                                    isRemoving = { key -> removingQueueKeys[key] == true },
-                                    enableSwipeToRemove = gestureQueueSwipeToRemove,
-                                    onSongClickAtIndex = onSongClickAtIndex,
-                                    onRequestRemove = { songRow, itemKey ->
-                                        dismissQueueRow(itemKey) { removeQueueSong(songRow.entryId) }
-                                    }
-                                )
                             }
                         }
                     }
@@ -843,7 +907,8 @@ private fun QueueItem(
     isDragging: Boolean,
     onSongClick: () -> Unit,
     onRemove: () -> Unit,
-    showDragHandle: Boolean = true
+    showDragHandle: Boolean = true,
+    dragHandleModifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -1040,7 +1105,9 @@ private fun QueueItem(
                         isPlayed -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                         else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     },
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier
+                        .size(20.dp)
+                        .then(dragHandleModifier)
                 )
                         
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1100,6 +1167,7 @@ private fun DismissibleQueueItem(
     onSongClickAtIndex: (Int) -> Unit,
     onRequestRemove: () -> Unit,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     enableSwipeToRemove: Boolean = true
 ) {
     val context = LocalContext.current
@@ -1168,7 +1236,8 @@ private fun DismissibleQueueItem(
                         onSongClickAtIndex(queuePosition)
                     },
                     onRemove = onRequestRemove,
-                    showDragHandle = showDragHandle
+                    showDragHandle = showDragHandle,
+                    dragHandleModifier = dragHandleModifier
                 )
             }
         }
@@ -1185,6 +1254,7 @@ private fun QueueListRowContent(
     onSongClickAtIndex: (Int) -> Unit,
     onRequestRemove: (QueueSongRow, String) -> Unit,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     enableSwipeToRemove: Boolean = true
 ) {
     when (row) {
@@ -1204,6 +1274,7 @@ private fun QueueListRowContent(
                 isPlayed = songRow.isPlayed,
                 isDragging = isDragging,
                 showDragHandle = reorderSupported && !songRow.isPlayed,
+                dragHandleModifier = dragHandleModifier,
                 itemShape = songRow.corners.toShape(),
                 corners = songRow.corners,
                 endPadding = endPadding,

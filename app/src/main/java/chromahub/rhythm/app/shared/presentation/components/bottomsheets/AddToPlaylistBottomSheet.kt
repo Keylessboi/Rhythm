@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -124,6 +125,10 @@ fun AddToPlaylistBottomSheet(
 
     val playlistListState = rememberLazyListState()
 
+    LaunchedEffect(sheetState) {
+        sheetState.expand()
+    }
+
     RhythmAdaptiveModalSheet(
         adaptiveType = SheetAdaptiveType.AUTO_DIALOG,
         lazyListState = playlistListState,
@@ -143,6 +148,7 @@ fun AddToPlaylistBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .padding(bottom = 24.dp)
         ) {
             // Header with title and song info
@@ -158,7 +164,7 @@ fun AddToPlaylistBottomSheet(
                     lazyListState = playlistListState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = false)
+                        .weight(1f)
                 ) { endPadding ->
                     LazyColumn(
                         state = playlistListState,

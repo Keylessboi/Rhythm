@@ -8953,8 +8953,8 @@ private fun IntegrationsSettingsCards(
             add(
                 onboardingToggleItem(
                     null,
-                    "Deezer",
-                    "Get high-quality album covers and track details automatically",
+                    context.getString(R.string.onboarding_integration_deezer),
+                    context.getString(R.string.api_deezer_desc),
                     deezerApiEnabled,
                     onDeezerChange,
                     null
@@ -8977,8 +8977,8 @@ private fun IntegrationsSettingsCards(
             add(
                 onboardingToggleItem(
                     null,
-                    "Lyrically",
-                    "Enjoy beautiful, word-by-word synchronized lyrics",
+                    context.getString(R.string.apimanagementsettingsscreen_lyrically),
+                    context.getString(R.string.api_lyrically_desc),
                     lyricallyApiEnabled,
                     onLyricallyChange,
                     null
@@ -8989,8 +8989,8 @@ private fun IntegrationsSettingsCards(
             add(
                 onboardingToggleItem(
                     null,
-                    "LrcLib",
-                    "Find and download synchronized scrolling lyrics",
+                    context.getString(R.string.onboarding_integration_lrclib),
+                    context.getString(R.string.api_lrclib_desc),
                     lrclibApiEnabled,
                     onLrcLibChange,
                     null
@@ -9001,8 +9001,8 @@ private fun IntegrationsSettingsCards(
             add(
                 onboardingToggleItem(
                     null,
-                    "YouTube Music",
-                    "Access matching song details and recommendations",
+                    context.getString(R.string.onboarding_integration_ytmusic),
+                    context.getString(R.string.api_ytmusic_desc),
                     ytMusicApiEnabled,
                     onYtMusicChange,
                     null
@@ -9013,8 +9013,8 @@ private fun IntegrationsSettingsCards(
             add(
                 onboardingToggleItem(
                     null,
-                    "Wikipedia",
-                    "Fetch album details and descriptions for About section",
+                    context.getString(R.string.onboarding_integration_wikipedia),
+                    context.getString(R.string.onboarding_integration_wikipedia_desc),
                     wikipediaApiEnabled,
                     onWikipediaChange,
                     null

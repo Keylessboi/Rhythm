@@ -29,7 +29,6 @@ import chromahub.rhythm.app.R
 import chromahub.rhythm.app.shared.data.model.AppSettings
 import chromahub.rhythm.app.shared.data.model.LyricsApiPriority
 import chromahub.rhythm.app.shared.presentation.components.icons.Icon
-import chromahub.rhythm.app.shared.presentation.components.icons.MaterialSymbolIcon
 import chromahub.rhythm.app.shared.presentation.components.icons.RhythmIcons
 import chromahub.rhythm.app.util.HapticUtils
 import chromahub.rhythm.app.util.HapticType
@@ -80,25 +79,22 @@ fun LyricsApiPriorityBottomSheet(
 
             // Options
             val priorityOptions = listOf(
-                LyricsApiPriority.BETTERLYRICS_FIRST to Triple(
+                LyricsApiPriority.BETTERLYRICS_FIRST to Pair(
                     "Better Lyrics First",
-                    "Search Better Lyrics API first, fallback to others",
-                    MaterialSymbolIcon("lyrics")
+                    "Word-by-word synchronized lyrics"
                 ),
-                LyricsApiPriority.LYRICALLY_FIRST to Triple(
+                LyricsApiPriority.LYRICALLY_FIRST to Pair(
                     "Lyrically First",
-                    "Search Lyrically API first, fallback to others",
-                    MaterialSymbolIcon("music_note")
+                    "Word-by-word synchronized lyrics"
                 ),
-                LyricsApiPriority.LRCLIB_FIRST to Triple(
+                LyricsApiPriority.LRCLIB_FIRST to Pair(
                     "LRCLib First",
-                    "Search LRCLib API first, fallback to others",
-                    MaterialSymbolIcon("cloud_queue")
+                    "Line-by-line synchronized lyrics"
                 )
             )
 
             priorityOptions.forEachIndexed { index, (priority, info) ->
-                val (title, description, icon) = info
+                val (title, description) = info
                 val isSelected = apiPriority == priority
 
                 Card(
@@ -122,18 +118,6 @@ fun LyricsApiPriorityBottomSheet(
                             .padding(20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = if (isSelected)
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(if (isSelected) 30.dp else 26.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = title,

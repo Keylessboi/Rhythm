@@ -829,10 +829,11 @@ fun LibraryScreen(
 
 
     val isListAtTop by remember(
-        selectedTabIndex, visibleTabIds, playlistViewType, albumViewType, artistViewType
+        selectedTabIndex, pagerState.currentPage, visibleTabIds, playlistViewType, albumViewType, artistViewType
     ) {
         derivedStateOf {
-            when (visibleTabIds.getOrNull(selectedTabIndex)) {
+            val activeTab = visibleTabIds.getOrNull(pagerState.currentPage) ?: visibleTabIds.getOrNull(selectedTabIndex)
+            when (activeTab) {
                 "SONGS" -> songsListState.firstVisibleItemIndex == 0 && songsListState.firstVisibleItemScrollOffset == 0
                 "LIKED" -> likedSongsListState.firstVisibleItemIndex == 0 && likedSongsListState.firstVisibleItemScrollOffset == 0
                 "DATES" -> datesListState.firstVisibleItemIndex == 0 && datesListState.firstVisibleItemScrollOffset == 0
@@ -1913,23 +1914,32 @@ fun LibraryScreen(
                             }
                             }
 
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(24.dp)
-                                    .align(Alignment.TopCenter)
-                                    .background(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.background,
-                                                MaterialTheme.colorScheme.background.copy(alpha = 0.72f),
-                                                MaterialTheme.colorScheme.background.copy(alpha = 0.32f),
-                                                Color.Transparent
+                            val topBlendAlpha by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (!isListAtTop) 1f else 0f,
+                                animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
+                                label = "library_top_blend_alpha"
+                            )
+
+                            if (topBlendAlpha > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(24.dp)
+                                        .align(Alignment.TopCenter)
+                                        .graphicsLayer { alpha = topBlendAlpha }
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.background,
+                                                    MaterialTheme.colorScheme.background.copy(alpha = 0.72f),
+                                                    MaterialTheme.colorScheme.background.copy(alpha = 0.32f),
+                                                    Color.Transparent
+                                                )
                                             )
                                         )
-                                    )
-                                    .zIndex(5f)
-                            )
+                                        .zIndex(5f)
+                                )
+                            }
                         androidx.compose.animation.AnimatedVisibility(
                             visible = isMediaScanning,
                             enter = fadeIn() + expandVertically(),

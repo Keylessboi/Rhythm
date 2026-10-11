@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - 
 
+## [5.5.498.1300] - 2026-10-11
+
+### Added
+- **Real-Time Playback Quality Info**: Tap the audio quality badge in the player to inspect comprehensive audio telemetry, including source format, active decoder engine, decoded stream specs (sample rate, bit depth, bitrate, channels), and real-time output destination (Bluetooth codec & transmission rate, USB DAC Bit-Perfect pass-through, or Android HAL routing/resampling status).
+- **Native Capabilities Screen**: Inspect device audio pipeline parameters, native HAL clock rates, kernel buffer frame bursts, DSP audio offload support, 32-bit float support, physical audio endpoints, and SoC hardware details with one-tap diagnostic report export.
+- **External Capabilities & Software Decoders**: Manage software audio engines, prioritize on-chip hardware codecs over software emulation, toggle 32-bit PCM float output, and inspect/toggle individual platform and software decoders.
+- **Decoder Extensions Screen**: Configure external audio extensions and inspect extended codec capabilities (FFmpeg, MIDI plugins) with ExoPlayer compatibility status.
+- **Persistent Quality Badge Option**: Added setting in Tuner to keep the audio quality indicator persistently visible on the Expressive Player instead of auto-hiding after 5 seconds.
+- **Player Bottom Controls Customization**: Normal mode bottom player controls can now be customized with pin limits and status indicators.
+
+### Changed
+- **Queue & Playlist Reordering**: Completely overhauled drag-and-drop list reordering with smoother auto-scrolling during drag, fluid edge blending, and stabilized list scroll.
+- **AutoEQ Preset Persistence**: Imported custom AutoEQ profiles are now permanently retained across sessions and properly interpolated across device hardware bands.
+- **Audio Output Detection**: Enhanced automatic switching and detection between USB DACs, Bluetooth A2DP/BLE, wired headphones, and internal speakers using system MediaRouter integration.
+- **Crossfade Engine Overhaul**: Refined track transition controller, reverb tail tolerances, and artwork cache calculation during crossfades.
+- **Missing Media Handling**: Queue now gracefully skips and prunes deleted or missing local audio files instead of halting playback.
+- **Translations**: Updated community translations across multiple locales from Weblate.
+
+### Performance
+- **Expanded Subsonic Library Sync**: Raised library sync limit from 5,000 to 50,000 songs.
+- **Resilient Page Checkpointing**: Subsonic full library sync now checkpoints each page to disk, allowing interrupted syncs to resume seamlessly without restarting from scratch.
+- **Off-Main-Thread Processing**: Catalog mapping, grouping, deduplication, and sorting moved completely off the main thread for smooth 120Hz scrolling.
+- **Optimized Catalog Cache**: Compact on-disk catalog caching without expiring signed URLs, with atomic file writes and batched saves.
+- **Deezer Artist Artwork Caching**: Deduped artist image queries to fetch once per artist and eliminated redundant network requests.
+
+### Fixed
+- **Date Added Reset**: Resolved issue where "Date Added" timestamps reset when moving, renaming, or recreating local audio files (#661).
+- **Subsonic Liked Songs**: Fixed starred Subsonic tracks not appearing in the Liked Songs playlist (#639).
+- **Subsonic Sync Storms**: Fixed redundant library re-fetches and sync storms on app startup when the server library is unchanged (#620).
+- **Subsonic Network Timeouts**: Added automatic retry for timed-out library sync requests and bounded album queries (#633).
+- **Jellyfin & Navidrome Endpoints**: Resolved playback quality switching, download endpoints, and connection issues (#561, #605, #606, #617).
+
 ## [5.5.492.1288 Beta] - 2026-10-01
 
 ### Added

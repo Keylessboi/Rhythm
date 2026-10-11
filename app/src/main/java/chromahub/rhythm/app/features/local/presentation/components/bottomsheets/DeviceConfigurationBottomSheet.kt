@@ -737,6 +737,7 @@ fun DeviceConfigurationBottomSheet(
                                 musicViewModel.saveCustomAutoEQProfiles(parsedProfiles)
                                 val profile = parsedProfiles.first()
                                 musicViewModel.applyAutoEQProfile(profile)
+                                musicViewModel.pinAutoEQProfile(profile.name)
                                 scope.launch {
                                     importSheetState.hide()
                                     showImportDialog = false

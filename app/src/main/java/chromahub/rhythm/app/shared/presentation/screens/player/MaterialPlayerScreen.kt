@@ -209,6 +209,9 @@ import chromahub.rhythm.app.features.local.presentation.screens.LibraryTab
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.AddToPlaylistBottomSheet
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.PlaybackBottomSheet
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.SongInfoBottomSheet
+import chromahub.rhythm.app.shared.presentation.components.bottomsheets.PlaybackQualityBottomSheet
+import chromahub.rhythm.app.shared.presentation.screens.settings.AudioRoutingDialog
+import chromahub.rhythm.app.infrastructure.service.MediaPlaybackService
 
 import chromahub.rhythm.app.shared.presentation.components.player.PlayerChipOrderBottomSheet
 import chromahub.rhythm.app.shared.presentation.components.lyrics.LyricsEditorBottomSheet
@@ -723,6 +726,9 @@ fun MaterialPlayerScreen(
     var showQueueSheet by remember { mutableStateOf(false) }
     var showDeviceOutputSheet by remember { mutableStateOf(false) }
     var showSongInfoSheet by remember { mutableStateOf(false) }
+    var showPlaybackQualitySheet by remember { mutableStateOf(false) }
+    var showAudioRoutingDialog by remember { mutableStateOf(false) }
+    val currentPlaybackQuality by (musicViewModel.currentPlaybackQuality).collectAsState()
     var candidateArtists by remember { mutableStateOf<List<Artist>>(emptyList()) }
     var showArtistChooserSheet by remember { mutableStateOf(false) }
 
@@ -1604,6 +1610,8 @@ fun MaterialPlayerScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             AudioQualityBadges(
                                 song = song,
+                                playbackQuality = currentPlaybackQuality,
+                                onClick = { showPlaybackQualitySheet = true },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -2019,6 +2027,8 @@ fun MaterialPlayerScreen(
                                                 Spacer(modifier = Modifier.height(if (isExtraSmallWidth) 4.dp else 8.dp))
                                                 AudioQualityBadges(
                                                     song = song,
+                                                    playbackQuality = currentPlaybackQuality,
+                                                    onClick = { showPlaybackQualitySheet = true },
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                             }
@@ -2450,6 +2460,8 @@ fun MaterialPlayerScreen(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 AudioQualityBadges(
                                     song = song,
+                                    playbackQuality = currentPlaybackQuality,
+                                    onClick = { showPlaybackQualitySheet = true },
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -4041,6 +4053,31 @@ fun MaterialPlayerScreen(
                 }
             },
             dismissButton = {}
+        )
+    }
+
+    if (showPlaybackQualitySheet && song != null) {
+        PlaybackQualityBottomSheet(
+            song = song,
+            playbackQuality = currentPlaybackQuality,
+            onDismissRequest = { showPlaybackQualitySheet = false },
+            onViewSongInfo = {
+                showPlaybackQualitySheet = false
+                showSongInfoSheet = true
+            },
+            onRouteAudio = {
+                showPlaybackQualitySheet = false
+                showAudioRoutingDialog = true
+            }
+        )
+    }
+
+    if (showAudioRoutingDialog) {
+        AudioRoutingDialog(
+            onDismiss = { showAudioRoutingDialog = false },
+            appSettings = appSettings,
+            context = context,
+            haptic = haptic
         )
     }
 }

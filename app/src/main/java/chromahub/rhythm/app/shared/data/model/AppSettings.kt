@@ -138,6 +138,13 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_AUDIO_ROUTING_MODE = "audio_routing_mode" // "default", "app", "system"
         private const val KEY_RESUME_ON_DEVICE_RECONNECT = "resume_on_device_reconnect"
         private const val KEY_AUDIO_OFFLOAD_ENABLED = "audio_offload_enabled"
+
+        private const val KEY_AUDIO_ENGINE_SOFTWARE_ENABLED = "audio_engine_software_enabled"
+        private const val KEY_AUDIO_ENGINE_PREFER_HARDWARE = "audio_engine_prefer_hardware"
+        private const val KEY_AUDIO_ENGINE_FLOAT_OUTPUT = "audio_engine_float_output"
+        private const val KEY_AUDIO_ENGINE_DISABLED_DECODERS = "audio_engine_disabled_decoders"
+        private const val KEY_DECODER_EXTENSIONS_ENABLED = "audio_decoder_extensions_enabled"
+        private const val KEY_DISABLED_DECODER_EXTENSIONS = "audio_disabled_decoder_extensions"
         
         // Battery Saver Settings
         private const val KEY_BATTERY_SAVER_ENABLED = "battery_saver_enabled"
@@ -600,6 +607,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_PLAYER_SHOW_SONG_INFO_ON_ARTWORK = "player_show_song_info_on_artwork"
         private const val KEY_PLAYER_ARTWORK_CORNER_RADIUS = "player_artwork_corner_radius" // 0-40 dp
         private const val KEY_PLAYER_SHOW_AUDIO_QUALITY_BADGES = "player_show_audio_quality_badges"
+        private const val KEY_EXPRESSIVE_QUALITY_BADGE_ALWAYS_VISIBLE = "expressive_quality_badge_always_visible"
         private const val KEY_PLAYER_PROGRESS_STYLE = "player_progress_style" // "NORMAL", "WAVY", "ROUNDED", "THIN", "THICK"
         private const val KEY_PLAYER_PROGRESS_THUMB_STYLE = "player_progress_thumb_style" // "NONE", "DEFAULT", "CIRCLE", "SQUARE", "PILL", "DIAMOND", "FLOWER", "HEART", "COOKIE", "PUFFY"
         private const val KEY_PLAYER_PROGRESS_THUMB_ROTATE = "player_progress_thumb_rotate" // Boolean
@@ -734,6 +742,24 @@ class AppSettings private constructor(context: Context) {
     
     private val _audioRoutingMode = MutableStateFlow(prefs.getString(KEY_AUDIO_ROUTING_MODE, "default") ?: "default")
     val audioRoutingMode: StateFlow<String> = _audioRoutingMode.asStateFlow()
+
+    private val _audioEngineSoftwareEnabled = MutableStateFlow(prefs.getBoolean(KEY_AUDIO_ENGINE_SOFTWARE_ENABLED, true))
+    val audioEngineSoftwareEnabled: StateFlow<Boolean> = _audioEngineSoftwareEnabled.asStateFlow()
+
+    private val _audioEnginePreferHardware = MutableStateFlow(prefs.getBoolean(KEY_AUDIO_ENGINE_PREFER_HARDWARE, true))
+    val audioEnginePreferHardware: StateFlow<Boolean> = _audioEnginePreferHardware.asStateFlow()
+
+    private val _audioEngineFloatOutput = MutableStateFlow(prefs.getBoolean(KEY_AUDIO_ENGINE_FLOAT_OUTPUT, true))
+    val audioEngineFloatOutput: StateFlow<Boolean> = _audioEngineFloatOutput.asStateFlow()
+
+    private val _audioEngineDisabledDecoders = MutableStateFlow(prefs.getStringSet(KEY_AUDIO_ENGINE_DISABLED_DECODERS, emptySet())?.toSet() ?: emptySet())
+    val audioEngineDisabledDecoders: StateFlow<Set<String>> = _audioEngineDisabledDecoders.asStateFlow()
+
+    private val _decoderExtensionsEnabled = MutableStateFlow(prefs.getBoolean(KEY_DECODER_EXTENSIONS_ENABLED, true))
+    val decoderExtensionsEnabled: StateFlow<Boolean> = _decoderExtensionsEnabled.asStateFlow()
+
+    private val _disabledDecoderExtensions = MutableStateFlow(prefs.getStringSet(KEY_DISABLED_DECODER_EXTENSIONS, emptySet())?.toSet() ?: emptySet())
+    val disabledDecoderExtensions: StateFlow<Set<String>> = _disabledDecoderExtensions.asStateFlow()
     
     // Lyrics Settings
     private val _showLyrics = MutableStateFlow(prefs.getBoolean(KEY_SHOW_LYRICS, true))
@@ -2347,6 +2373,64 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
         prefs.edit { putString(KEY_AUDIO_ROUTING_MODE, mode) }
         _audioRoutingMode.value = mode
         Log.d("AppSettings", "Audio routing mode set to: $mode")
+    }
+
+    fun setAudioEngineSoftwareEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_AUDIO_ENGINE_SOFTWARE_ENABLED, enabled) }
+        _audioEngineSoftwareEnabled.value = enabled
+    }
+
+    fun setAudioEnginePreferHardware(prefer: Boolean) {
+        prefs.edit { putBoolean(KEY_AUDIO_ENGINE_PREFER_HARDWARE, prefer) }
+        _audioEnginePreferHardware.value = prefer
+    }
+
+    fun setAudioEngineFloatOutput(enable: Boolean) {
+        prefs.edit { putBoolean(KEY_AUDIO_ENGINE_FLOAT_OUTPUT, enable) }
+        _audioEngineFloatOutput.value = enable
+    }
+
+    fun setAudioEngineDisabledDecoders(disabledSet: Set<String>) {
+        prefs.edit { putStringSet(KEY_AUDIO_ENGINE_DISABLED_DECODERS, disabledSet) }
+        _audioEngineDisabledDecoders.value = disabledSet
+    }
+
+    fun toggleAudioEngineDecoder(decoderName: String, enabled: Boolean) {
+        val current = _audioEngineDisabledDecoders.value.toMutableSet()
+        if (enabled) {
+            current.remove(decoderName)
+        } else {
+            current.add(decoderName)
+        }
+        setAudioEngineDisabledDecoders(current)
+    }
+
+    fun resetAudioEngineDecoders() {
+        setAudioEngineDisabledDecoders(emptySet())
+    }
+
+    fun setDecoderExtensionsEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_DECODER_EXTENSIONS_ENABLED, enabled) }
+        _decoderExtensionsEnabled.value = enabled
+    }
+
+    fun setDisabledDecoderExtensions(disabledSet: Set<String>) {
+        prefs.edit { putStringSet(KEY_DISABLED_DECODER_EXTENSIONS, disabledSet) }
+        _disabledDecoderExtensions.value = disabledSet
+    }
+
+    fun toggleDecoderExtension(extensionId: String, enabled: Boolean) {
+        val current = _disabledDecoderExtensions.value.toMutableSet()
+        if (enabled) {
+            current.remove(extensionId)
+        } else {
+            current.add(extensionId)
+        }
+        setDisabledDecoderExtensions(current)
+    }
+
+    fun resetDecoderExtensions() {
+        setDisabledDecoderExtensions(emptySet())
     }
     
     fun setAudioNormalization(enable: Boolean) {
@@ -5666,6 +5750,7 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
         _playerShowSongInfoOnArtwork.value = prefs.getBoolean(KEY_PLAYER_SHOW_SONG_INFO_ON_ARTWORK, true)
         _playerArtworkCornerRadius.value = prefs.getInt(KEY_PLAYER_ARTWORK_CORNER_RADIUS, 28)
         _playerShowAudioQualityBadges.value = prefs.getBoolean(KEY_PLAYER_SHOW_AUDIO_QUALITY_BADGES, true)
+        _expressiveQualityBadgeAlwaysVisible.value = prefs.getBoolean(KEY_EXPRESSIVE_QUALITY_BADGE_ALWAYS_VISIBLE, false)
         
         // Lyrics song preferences and renaming behavior
         _lrcRenameBehavior.value = prefs.getString(KEY_LRC_RENAME_BEHAVIOR, "ask") ?: "ask"
@@ -6234,6 +6319,13 @@ private val _autoCheckForUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CH
     fun setPlayerShowAudioQualityBadges(value: Boolean) {
         _playerShowAudioQualityBadges.value = value
         prefs.edit { putBoolean(KEY_PLAYER_SHOW_AUDIO_QUALITY_BADGES, value) }
+    }
+
+    private val _expressiveQualityBadgeAlwaysVisible = MutableStateFlow(prefs.getBoolean(KEY_EXPRESSIVE_QUALITY_BADGE_ALWAYS_VISIBLE, false))
+    val expressiveQualityBadgeAlwaysVisible: StateFlow<Boolean> = _expressiveQualityBadgeAlwaysVisible.asStateFlow()
+    fun setExpressiveQualityBadgeAlwaysVisible(value: Boolean) {
+        _expressiveQualityBadgeAlwaysVisible.value = value
+        prefs.edit { putBoolean(KEY_EXPRESSIVE_QUALITY_BADGE_ALWAYS_VISIBLE, value) }
     }
     
     // Player Progress Bar Style

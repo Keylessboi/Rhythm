@@ -281,6 +281,13 @@ sealed class Screen(val route: String) {
     object TunerReplayGain : Screen("tuner_replay_gain_settings")
     object TunerCrossfade : Screen("tuner_crossfade_settings")
     object TunerDefaultPlaylists : Screen("tuner_default_playlists_settings")
+    object TunerNativeCapabilities : Screen(SettingsRoutes.NATIVE_CAPABILITIES)
+    val TunerDeviceCapabilities = TunerNativeCapabilities
+    object TunerExternalCapabilities : Screen(SettingsRoutes.EXTERNAL_CAPABILITIES)
+    val TunerAudioCapabilities = TunerExternalCapabilities
+    val TunerAudioEngine = TunerExternalCapabilities
+    object TunerDecoderExtensions : Screen(SettingsRoutes.DECODER_EXTENSIONS)
+    val TunerFallbackEngines = TunerDecoderExtensions
     
     // Stats Screen
     object RhythmStats : Screen("rhythm_stats")
@@ -1266,6 +1273,7 @@ private fun LocalNavigationContent(
                     RhythmPlayerSheet(
                         isExpanded = currentRoute == Screen.Player.route,
                         onExpand = {
+                            viewModel.refreshAudioDevices()
                             navController.navigate(Screen.Player.route) {
                                 launchSingleTop = true
                             }
@@ -2184,7 +2192,36 @@ private fun LocalNavigationContent(
                             navController.navigate(Screen.TunerUpdates.route) {
                                 launchSingleTop = true
                             }
+                        },
+                        onNavigateTo = { route ->
+                            navController.navigate(route) {
+                                launchSingleTop = true
+                            }
                         }
+                    )
+                }
+
+                composable(Screen.TunerNativeCapabilities.route) {
+                    chromahub.rhythm.app.shared.presentation.screens.settings.NativeCapabilitiesSettingsScreen(
+                        onBackClick = navigateBackOrToSettings
+                    )
+                }
+
+                composable(Screen.TunerExternalCapabilities.route) {
+                    chromahub.rhythm.app.shared.presentation.screens.settings.ExternalCapabilitiesSettingsScreen(
+                        onBackClick = navigateBackOrToSettings,
+                        onNavigateTo = { route ->
+                            when (route) {
+                                SettingsRoutes.DECODER_EXTENSIONS, SettingsRoutes.FALLBACK_ENGINES -> navController.navigate(Screen.TunerDecoderExtensions.route)
+                                else -> navController.navigate(route)
+                            }
+                        }
+                    )
+                }
+
+                composable(Screen.TunerDecoderExtensions.route) {
+                    chromahub.rhythm.app.shared.presentation.screens.settings.DecoderExtensionsSettingsScreen(
+                        onBackClick = navigateBackOrToSettings
                     )
                 }
 
@@ -2292,6 +2329,9 @@ private fun LocalNavigationContent(
                             when (route) {
                                 SettingsRoutes.REPLAY_GAIN -> navController.navigate(Screen.TunerReplayGain.route)
                                 SettingsRoutes.CROSSFADE -> navController.navigate(Screen.TunerCrossfade.route)
+                                SettingsRoutes.EXTERNAL_CAPABILITIES, SettingsRoutes.AUDIO_CAPABILITIES, SettingsRoutes.AUDIO_ENGINE -> navController.navigate(Screen.TunerExternalCapabilities.route)
+                                SettingsRoutes.DECODER_EXTENSIONS, SettingsRoutes.FALLBACK_ENGINES -> navController.navigate(Screen.TunerDecoderExtensions.route)
+                                SettingsRoutes.NATIVE_CAPABILITIES, SettingsRoutes.DEVICE_CAPABILITIES -> navController.navigate(Screen.TunerNativeCapabilities.route)
                             }
                         }
                     )

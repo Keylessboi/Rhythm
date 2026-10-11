@@ -27,6 +27,8 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import chromahub.rhythm.app.core.device.DeviceCapabilitiesProvider
+import chromahub.rhythm.app.core.device.HiFiCapabilityChecker
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.animation.core.Spring
@@ -165,7 +167,8 @@ import androidx.core.net.toUri
 @Composable
 fun AboutScreen(
     onBackClick: () -> Unit,
-    onNavigateToUpdates: (() -> Unit)? = null
+    onNavigateToUpdates: (() -> Unit)? = null,
+    onNavigateTo: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -277,6 +280,7 @@ fun AboutScreen(
                     .joinToString(separator = ", ")
                     .ifBlank { context.getString(R.string.settings_about_architecture_value) }
 
+                val isFloatCapable = remember { HiFiCapabilityChecker.isSupported() }
                 val detailCards = listOf(
                     ProjectDetailCardData(
                         icon = RhythmIcons.Info,
@@ -297,6 +301,18 @@ fun AboutScreen(
                         icon = MaterialSymbolIcon("memory"),
                         label = context.getString(R.string.settings_about_architecture),
                         value = detectedAbis
+                    ),
+                    ProjectDetailCardData(
+                        icon = MaterialSymbolIcon("perm_device_information", filled = true),
+                        label = stringResource(R.string.settings_category_native_capabilities_title),
+                        value = "${Build.BRAND} • Hardware Audio",
+                        onClick = { onNavigateTo?.invoke(SettingsRoutes.NATIVE_CAPABILITIES) }
+                    ),
+                    ProjectDetailCardData(
+                        icon = MaterialSymbolIcon("graphic_eq", filled = true),
+                        label = stringResource(R.string.settings_category_external_capabilities_title),
+                        value = "Software Engine • Codecs",
+                        onClick = { onNavigateTo?.invoke(SettingsRoutes.EXTERNAL_CAPABILITIES) }
                     )
                 )
 
@@ -317,7 +333,7 @@ fun AboutScreen(
                                     label = card.label,
                                     value = card.value,
                                     shape = getDetailCardShape(rowIndex * 2 + colIndex, detailCards.size),
-                                    onClick = { copyToClipboard(card.label, card.value) },
+                                    onClick = card.onClick ?: { copyToClipboard(card.label, card.value) },
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
@@ -333,6 +349,7 @@ fun AboutScreen(
                         shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 20.dp, bottomEnd = 20.dp),
                         onClick = {
                             val allInfo = buildString {
+                                appendLine("=== Rhythm System Information ===")
                                 appendLine("App: Rhythm")
                                 appendLine("Version: ${BuildConfig.VERSION_NAME}")
                                 appendLine("Build: ${BuildConfig.VERSION_CODE} ($buildVariant)")
@@ -341,7 +358,9 @@ fun AboutScreen(
                                 appendLine("Brand/Manufacturer: ${Build.BRAND} / ${Build.MANUFACTURER}")
                                 appendLine("Model (Product): ${Build.MODEL} (${Build.PRODUCT})")
                                 appendLine("Board/Hardware: ${Build.BOARD} / ${Build.HARDWARE}")
-                                append("Architecture (ABIs): ${Build.SUPPORTED_ABIS.joinToString(", ")}")
+                                appendLine("Architecture (ABIs): ${Build.SUPPORTED_ABIS.joinToString(", ")}")
+                                appendLine()
+                                append(DeviceCapabilitiesProvider.generateDiagnosticReport(context))
                             }
                             copyToClipboard(context.getString(R.string.about_copy_system_info), allInfo)
                         },
@@ -945,7 +964,8 @@ fun CreditItem(
 private data class ProjectDetailCardData(
     val icon: Any,
     val label: String,
-    val value: String
+    val value: String,
+    val onClick: (() -> Unit)? = null
 )
 
 private fun getDetailCardShape(index: Int, totalItems: Int): RoundedCornerShape {

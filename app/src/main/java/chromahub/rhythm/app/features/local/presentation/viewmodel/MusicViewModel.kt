@@ -54,6 +54,7 @@ import chromahub.rhythm.app.shared.data.model.Playlist
 import chromahub.rhythm.app.shared.data.model.Queue
 import chromahub.rhythm.app.shared.data.model.Song
 import chromahub.rhythm.app.shared.data.model.FolderNode
+import chromahub.rhythm.app.shared.data.model.PlaybackQualityInfo
 import chromahub.rhythm.app.infrastructure.service.MediaPlaybackService
 import chromahub.rhythm.app.infrastructure.widget.WidgetUpdater
 import chromahub.rhythm.app.util.AudioDeviceManager
@@ -237,6 +238,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     
     // AutoEQ manager
     private val autoEQManager = AutoEQManager(application)
+    private val _autoEQProfiles = MutableStateFlow<List<chromahub.rhythm.app.shared.data.model.AutoEQProfile>>(emptyList())
+    val autoEQProfiles: StateFlow<List<chromahub.rhythm.app.shared.data.model.AutoEQProfile>> = _autoEQProfiles.asStateFlow()
+    private val _autoEQLoading = MutableStateFlow(false)
+    val autoEQLoading: StateFlow<Boolean> = _autoEQLoading.asStateFlow()
     
     // Queue state manager
     private val queueStateHolder = QueueStateHolder(appSettings)
@@ -938,6 +943,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
 
+    val currentPlaybackQuality: StateFlow<PlaybackQualityInfo?> = MediaPlaybackService.currentPlaybackQuality
+
     private val _currentQueue = MutableStateFlow(Queue(emptyList(), -1))
     val currentQueue: StateFlow<Queue> = _currentQueue.asStateFlow()
 
@@ -1459,6 +1466,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             appSettings.customAutoEQProfiles.collect { profiles ->
                 autoEQManager.setCustomProfiles(profiles)
+                if (_autoEQProfiles.value.isNotEmpty()) {
+                    _autoEQProfiles.value = autoEQManager.getAllProfiles()
+                }
             }
         }
 
@@ -6894,9 +6904,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Refresh audio devices manually
      */
-    fun refreshAudioDevices() {
-        Log.d(TAG, "Manually refreshing audio devices")
-        audioDeviceManager.refreshDevices()
+    fun refreshAudioDevices(force: Boolean = true) {
+        Log.d(TAG, "Manually refreshing audio devices (force=$force)")
+        audioDeviceManager.refreshDevices(force = force)
     }
 
     /**
@@ -10219,11 +10229,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     // AutoEQ functions
-    private val _autoEQProfiles = MutableStateFlow<List<chromahub.rhythm.app.shared.data.model.AutoEQProfile>>(emptyList())
-    val autoEQProfiles: StateFlow<List<chromahub.rhythm.app.shared.data.model.AutoEQProfile>> = _autoEQProfiles.asStateFlow()
-    
-    private val _autoEQLoading = MutableStateFlow(false)
-    val autoEQLoading: StateFlow<Boolean> = _autoEQLoading.asStateFlow()
     
     fun loadAutoEQProfiles() {
         viewModelScope.launch {
@@ -10232,8 +10237,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val result: Result<AutoEQDatabase> = autoEQManager.loadProfiles()
                 if (result.isSuccess) {
                     val database = result.getOrNull()!!
-                    _autoEQProfiles.value = database.profiles
-                    Log.d(TAG, "Loaded ${database.profiles.size} AutoEQ profiles")
+                    _autoEQProfiles.value = autoEQManager.getAllProfiles()
+                    Log.d(TAG, "Loaded ${_autoEQProfiles.value.size} AutoEQ profiles (database + custom)")
                 } else {
                     Log.e(TAG, "Failed to load AutoEQ profiles", result.exceptionOrNull())
                 }
@@ -10442,21 +10447,40 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveCustomAutoEQProfile(profile: chromahub.rhythm.app.shared.data.model.AutoEQProfile) {
-        appSettings.saveCustomAutoEQProfile(profile)
+        val verifiedBands = when {
+            profile.bands.size == 10 -> profile.bands
+            profile.bands.size > 10 -> profile.bands.take(10)
+            else -> profile.bands + List(10 - profile.bands.size) { 0f }
+        }
+        val normalized = profile.copy(bands = verifiedBands)
+        appSettings.saveCustomAutoEQProfile(normalized)
         autoEQManager.setCustomProfiles(appSettings.customAutoEQProfiles.value)
-        Log.d(TAG, "Saved custom AutoEQ profile: ${profile.name}")
+        _autoEQProfiles.value = autoEQManager.getAllProfiles()
+        pinAutoEQProfile(normalized.name)
+        Log.d(TAG, "Saved custom AutoEQ profile with 10 bands: ${normalized.name}")
     }
 
     fun saveCustomAutoEQProfiles(profiles: List<chromahub.rhythm.app.shared.data.model.AutoEQProfile>) {
-        appSettings.saveCustomAutoEQProfiles(profiles)
+        val normalizedList = profiles.map { profile ->
+            val verifiedBands = when {
+                profile.bands.size == 10 -> profile.bands
+                profile.bands.size > 10 -> profile.bands.take(10)
+                else -> profile.bands + List(10 - profile.bands.size) { 0f }
+            }
+            profile.copy(bands = verifiedBands)
+        }
+        appSettings.saveCustomAutoEQProfiles(normalizedList)
         autoEQManager.setCustomProfiles(appSettings.customAutoEQProfiles.value)
-        Log.d(TAG, "Saved ${profiles.size} custom AutoEQ profiles")
+        _autoEQProfiles.value = autoEQManager.getAllProfiles()
+        normalizedList.firstOrNull()?.let { pinAutoEQProfile(it.name) }
+        Log.d(TAG, "Saved ${normalizedList.size} custom AutoEQ profiles (10 bands enforced)")
     }
 
     fun deleteAutoEQProfile(name: String) {
         // 1. Delete from custom profiles if present
         appSettings.deleteCustomAutoEQProfile(name)
         autoEQManager.setCustomProfiles(appSettings.customAutoEQProfiles.value)
+        _autoEQProfiles.value = autoEQManager.getAllProfiles()
 
         // 2. Unpin from pinned profiles
         appSettings.unpinAutoEQProfile(name)

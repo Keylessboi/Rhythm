@@ -194,6 +194,13 @@ object SettingsRoutes {
     const val BATTERY_SAVER = "battery_saver_settings"
     const val REPLAY_GAIN = "replay_gain_settings"
     const val CROSSFADE = "crossfade_settings"
+    const val NATIVE_CAPABILITIES = "tuner_native_capabilities_settings"
+    const val EXTERNAL_CAPABILITIES = "tuner_external_capabilities_settings"
+    const val DECODER_EXTENSIONS = "tuner_decoder_extensions_settings"
+    const val DEVICE_CAPABILITIES = NATIVE_CAPABILITIES
+    const val AUDIO_CAPABILITIES = EXTERNAL_CAPABILITIES
+    const val AUDIO_ENGINE = EXTERNAL_CAPABILITIES
+    const val FALLBACK_ENGINES = DECODER_EXTENSIONS
 }
 
 data class SettingItem(
@@ -1140,7 +1147,18 @@ fun SettingsScreenWrapper(
                         SettingsRoutes.ARTIST_SEPARATORS -> ArtistSeparatorsSettingsScreen(onBackClick = handleBack)
                         SettingsRoutes.ABOUT -> chromahub.rhythm.app.shared.presentation.screens.settings.AboutScreen(
                             onBackClick = handleBack,
-                            onNavigateToUpdates = { onNavigateToSubsetting(SettingsRoutes.UPDATES) }
+                            onNavigateToUpdates = { onNavigateToSubsetting(SettingsRoutes.UPDATES) },
+                            onNavigateTo = onNavigateToSubsetting
+                        )
+                        SettingsRoutes.NATIVE_CAPABILITIES, SettingsRoutes.DEVICE_CAPABILITIES -> NativeCapabilitiesSettingsScreen(
+                            onBackClick = handleBack
+                        )
+                        SettingsRoutes.EXTERNAL_CAPABILITIES, SettingsRoutes.AUDIO_CAPABILITIES, SettingsRoutes.AUDIO_ENGINE -> ExternalCapabilitiesSettingsScreen(
+                            onBackClick = handleBack,
+                            onNavigateTo = onNavigateToSubsetting
+                        )
+                        SettingsRoutes.DECODER_EXTENSIONS, SettingsRoutes.FALLBACK_ENGINES -> DecoderExtensionsSettingsScreen(
+                            onBackClick = handleBack
                         )
                         SettingsRoutes.UPDATES -> UpdatesSettingsScreen(onBackClick = handleBack)
                         SettingsRoutes.LABS, SettingsRoutes.EXPERIMENTAL_FEATURES -> LabsSettingsScreen(
@@ -1284,7 +1302,18 @@ fun SettingsScreenWrapper(
                 SettingsRoutes.ARTIST_SEPARATORS -> ArtistSeparatorsSettingsScreen(onBackClick = handleBack)
                 SettingsRoutes.ABOUT -> chromahub.rhythm.app.shared.presentation.screens.settings.AboutScreen(
                     onBackClick = handleBack,
-                    onNavigateToUpdates = { onNavigateToSubsetting(SettingsRoutes.UPDATES) }
+                    onNavigateToUpdates = { onNavigateToSubsetting(SettingsRoutes.UPDATES) },
+                    onNavigateTo = onNavigateToSubsetting
+                )
+                SettingsRoutes.NATIVE_CAPABILITIES, SettingsRoutes.DEVICE_CAPABILITIES -> NativeCapabilitiesSettingsScreen(
+                    onBackClick = handleBack
+                )
+                SettingsRoutes.EXTERNAL_CAPABILITIES, SettingsRoutes.AUDIO_CAPABILITIES, SettingsRoutes.AUDIO_ENGINE -> ExternalCapabilitiesSettingsScreen(
+                    onBackClick = handleBack,
+                    onNavigateTo = onNavigateToSubsetting
+                )
+                SettingsRoutes.DECODER_EXTENSIONS, SettingsRoutes.FALLBACK_ENGINES -> DecoderExtensionsSettingsScreen(
+                    onBackClick = handleBack
                 )
                 SettingsRoutes.UPDATES -> UpdatesSettingsScreen(onBackClick = handleBack)
                 SettingsRoutes.LABS, SettingsRoutes.EXPERIMENTAL_FEATURES -> LabsSettingsScreen(

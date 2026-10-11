@@ -177,36 +177,6 @@ import chromahub.rhythm.app.shared.presentation.screens.settings.SettingItem
 import chromahub.rhythm.app.shared.presentation.screens.settings.SettingGroup
 
 
-private data class FormatCategory(
-    val titleRes: Int,
-    val formats: List<String>
-)
-
-private val FORMAT_CATEGORIES = listOf(
-    FormatCategory(
-        R.string.settings_formats_group_common,
-        listOf("mp3", "m4a", "aac", "alac", "flac", "ogg", "opus", "oga", "opa", "wav", "aiff", "aif", "wma")
-    ),
-    FormatCategory(
-        R.string.settings_formats_group_lossless,
-        listOf("ape", "wv", "tta", "tak", "dsf", "dff", "dsd")
-    ),
-    FormatCategory(
-        R.string.settings_formats_group_surround,
-        listOf("ac3", "ac4", "eac", "eac3", "dts", "dtshd", "dtsx", "truehd")
-    ),
-    FormatCategory(
-        R.string.settings_formats_group_containers,
-        listOf("mka", "m4b", "adts", "mp4", "mkv")
-    ),
-    FormatCategory(
-        R.string.settings_formats_group_legacy,
-        listOf("mid", "midi", "mhm", "mhm1")
-    )
-)
-
-private val ALL_KNOWN_FORMATS: List<String> = FORMAT_CATEGORIES.flatMap { it.formats }
-
 // ✅ REDESIGNED Media Scan Screen with improved UI
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -227,22 +197,7 @@ fun MediaScanSettingsScreen(onBackClick: () -> Unit) {
     // Get current media scan mode from settings
     val mediaScanMode by appSettings.mediaScanMode.collectAsState()
     val includeHiddenWhitelistedMedia by appSettings.includeHiddenWhitelistedMedia.collectAsState()
-    val allowedFormats by appSettings.allowedFormats.collectAsState()
     val minimumDuration by appSettings.minimumDuration.collectAsState()
-
-    val enabledKnownCount = allowedFormats.count { it in ALL_KNOWN_FORMATS }
-
-    fun updateAllowedFormats(newFormats: Set<String>) {
-        if (newFormats.isEmpty()) {
-            Toast.makeText(
-                context,
-                context.getString(R.string.settings_formats_at_least_one),
-                Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-        appSettings.setAllowedFormats(newFormats)
-    }
 
     // Mode state
     var currentMode by remember {
@@ -252,7 +207,6 @@ fun MediaScanSettingsScreen(onBackClick: () -> Unit) {
     // Bottom sheet states
     var showSongsBottomSheet by remember { mutableStateOf(false) }
     var showFoldersBottomSheet by remember { mutableStateOf(false) }
-    var showFormatsBottomSheet by remember { mutableStateOf(false) }
     var showDurationBottomSheet by remember { mutableStateOf(false) }
 
     // File picker launcher for folder selection
@@ -563,34 +517,6 @@ fun MediaScanSettingsScreen(onBackClick: () -> Unit) {
                 Material3SettingsGroup(
                     title = context.getString(R.string.settings_scan_behavior),
                     items = scanBehaviorItems,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            }
-
-            item {
-                val formatsItems = listOf(
-                    toMaterial3SettingsItem(
-                        context = context,
-                        hapticFeedback = haptic,
-                        item = SettingItem(
-                            icon = RhythmIcons.MusicNote,
-                            title = context.getString(R.string.settings_allowed_formats),
-                            description = context.getString(
-                                R.string.settings_allowed_formats_desc,
-                                enabledKnownCount,
-                                ALL_KNOWN_FORMATS.size
-                            ),
-                            onClick = {
-                                HapticUtils.performHapticFeedback(context, haptic, HapticType.LIGHT)
-                                showFormatsBottomSheet = true
-                            }
-                        )
-                    )
-                )
-
-                Material3SettingsGroup(
-                    title = context.getString(R.string.settings_audio_formats),
-                    items = formatsItems,
                     containerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             }
@@ -1198,135 +1124,7 @@ fun MediaScanSettingsScreen(onBackClick: () -> Unit) {
         }
     }
 
-    if (showFormatsBottomSheet) {
-        val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
 
-        LaunchedEffect(Unit) {
-            sheetState.expand()
-        }
-
-        RhythmAdaptiveModalSheet(
-            adaptiveType = SheetAdaptiveType.AUTO_DIALOG,
-            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
-            onDismissRequest = { showFormatsBottomSheet = false },
-            sheetState = sheetState,
-            dragHandle = {
-                BottomSheetDefaults.DragHandle(
-                    color = MaterialTheme.colorScheme.primary
-                )
-            },
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            StandardBottomSheetHeader(
-                title = context.getString(R.string.settings_allowed_formats),
-                subtitle = context.getString(
-                    R.string.settings_allowed_formats_desc,
-                    enabledKnownCount,
-                    ALL_KNOWN_FORMATS.size
-                ),
-                visible = true
-            )
-
-            val formatsScrollState = rememberScrollState()
-
-            AdaptiveSheetScrollContainer(
-                scrollState = formatsScrollState,
-                modifier = Modifier.fillMaxWidth()
-            ) { endPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(formatsScrollState)
-                        .padding(start = 24.dp, end = 24.dp + endPadding, bottom = 24.dp)
-                ) {
-                    FORMAT_CATEGORIES.forEach { category ->
-                        Text(
-                            text = context.getString(category.titleRes),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 8.dp, top = 12.dp)
-                        )
-
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            category.formats.forEach { format ->
-                                val selected = allowedFormats.contains(format)
-                                ExpressiveFilterChip(
-                                    selected = selected,
-                                    onClick = {
-                                        HapticUtils.performHapticFeedback(context, haptic, HapticType.LIGHT)
-                                        updateAllowedFormats(
-                                            if (selected) allowedFormats - format else allowedFormats + format
-                                        )
-                                    },
-                                    leadingIcon = if (selected) ({
-                                        Icon(
-                                            imageVector = RhythmIcons.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(FilterChipDefaults.IconSize)
-                                        )
-                                    }) else null,
-                                    label = {
-                                        Text(
-                                            text = format.uppercase(),
-                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = MaterialSymbolIcon("lightbulb", filled = true),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = context.getString(R.string.settings_quick_tips),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = context.getString(R.string.settings_allowed_formats_open_desc),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = context.getString(R.string.settings_formats_video_note),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     if (showDurationBottomSheet) {
         val sheetState = rememberBottomSheetState(

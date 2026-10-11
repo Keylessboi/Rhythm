@@ -185,6 +185,7 @@ fun PlayerCustomizationSettingsScreen(onBackClick: () -> Unit) {
     val playerShowSongInfoOnArtwork by appSettings.playerShowSongInfoOnArtwork.collectAsState()
     val playerArtworkCornerRadius by appSettings.playerArtworkCornerRadius.collectAsState()
     val playerShowAudioQualityBadges by appSettings.playerShowAudioQualityBadges.collectAsState()
+    val expressiveQualityBadgeAlwaysVisible by appSettings.expressiveQualityBadgeAlwaysVisible.collectAsState()
     val expressiveShapesEnabled by appSettings.expressiveShapesEnabled.collectAsState()
     val playerAmbientBackdropEnabled by appSettings.playerAmbientBackdropEnabled.collectAsState()
     val playerAmbientBackdropIntensity by appSettings.playerAmbientBackdropIntensity.collectAsState()
@@ -330,6 +331,18 @@ fun PlayerCustomizationSettingsScreen(onBackClick: () -> Unit) {
                                 description = context.getString(R.string.settings_audio_quality_badges_desc),
                                 toggleState = playerShowAudioQualityBadges,
                                 onToggleChange = { appSettings.setPlayerShowAudioQualityBadges(it) }
+                            )
+                        ),
+                        toMaterial3SettingsItem(
+                            context = context,
+                            hapticFeedback = haptics,
+                            item = SettingItem(
+                                icon = MaterialSymbolIcon("visibility"),
+                                title = context.getString(R.string.settings_expressive_quality_badge_always_visible),
+                                description = context.getString(R.string.settings_expressive_quality_badge_always_visible_desc),
+                                toggleState = expressiveQualityBadgeAlwaysVisible,
+                                onToggleChange = { appSettings.setExpressiveQualityBadgeAlwaysVisible(it) },
+                                enabled = playerShowAudioQualityBadges
                             )
                         )
                     ),

@@ -49,6 +49,8 @@ import chromahub.rhythm.app.infrastructure.service.player.PreloadController
 import chromahub.rhythm.app.infrastructure.service.player.replaygain.ReplayGainCache
 import chromahub.rhythm.app.infrastructure.service.player.MissingLocalMediaClassifier
 import chromahub.rhythm.app.infrastructure.service.util.RhythmBitmapLoader
+import chromahub.rhythm.app.core.device.HiFiCapabilityChecker
+import chromahub.rhythm.app.core.device.DeviceCapabilitiesProvider
 import chromahub.rhythm.app.infrastructure.widget.WidgetUpdater
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -72,6 +74,11 @@ import chromahub.rhythm.app.shared.data.repository.StatsTimeRange
 import chromahub.rhythm.app.shared.presentation.screens.settings.rhythmGuardFormatDurationFromMinutes
 import chromahub.rhythm.app.activities.RhythmGuardTimeoutActivity
 import androidx.core.net.toUri
+import chromahub.rhythm.app.shared.data.model.PlaybackQualityInfo
+import chromahub.rhythm.app.util.AudioQualityDetector
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @OptIn(UnstableApi::class)
 class MediaPlaybackService : MediaLibraryService(), Player.Listener {
@@ -209,17 +216,30 @@ class MediaPlaybackService : MediaLibraryService(), Player.Listener {
 
     private val btReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED" &&
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-            ) {
-                val codecStatus = intent.getParcelableExtra("android.bluetooth.extra.CODEC_STATUS", android.bluetooth.BluetoothCodecStatus::class.java)
-                val newBtInfo = chromahub.rhythm.app.util.BtCodecInfo.fromCodecConfig(codecStatus?.codecConfig)
-                if (newBtInfo != null && newBtInfo != btInfo) {
-                    btInfo = newBtInfo
-                    Log.d(TAG, "New Bluetooth codec config: $btInfo")
-                    if (appSettings.codecMonitoringEnabled.value && appSettings.showCodecNotifications.value) {
-                        showCodecNotification(newBtInfo)
+            val action = intent?.action ?: return
+            when (action) {
+                "android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val codecStatus = intent.getParcelableExtra("android.bluetooth.extra.CODEC_STATUS", android.bluetooth.BluetoothCodecStatus::class.java)
+                        val newBtInfo = chromahub.rhythm.app.util.BtCodecInfo.fromCodecConfig(codecStatus?.codecConfig)
+                        if (newBtInfo != null && newBtInfo != btInfo) {
+                            btInfo = newBtInfo
+                            Log.d(TAG, "New Bluetooth codec config: $btInfo")
+                            updatePlaybackQuality()
+                            if (appSettings.codecMonitoringEnabled.value && appSettings.showCodecNotifications.value) {
+                                showCodecNotification(newBtInfo)
+                            }
+                        }
+                    } else {
+                        updatePlaybackQuality()
                     }
+                }
+                android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+                android.bluetooth.BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED,
+                android.media.AudioManager.ACTION_HEADSET_PLUG,
+                android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY -> {
+                    Log.d(TAG, "Audio routing change broadcast ($action): updating playback quality")
+                    updatePlaybackQuality()
                 }
             }
         }
@@ -470,6 +490,8 @@ class MediaPlaybackService : MediaLibraryService(), Player.Listener {
     // SharedPreferences keys
     companion object {
         var instanceForWidgetAndLyricsOnly: MediaPlaybackService? = null
+        private val _currentPlaybackQuality = MutableStateFlow<PlaybackQualityInfo?>(null)
+        val currentPlaybackQuality: StateFlow<PlaybackQualityInfo?> = _currentPlaybackQuality.asStateFlow()
         private const val TAG = "MediaPlaybackService"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "RhythmMediaPlayback"
@@ -621,7 +643,13 @@ class MediaPlaybackService : MediaLibraryService(), Player.Listener {
         )
 
         try {
-            val btFilter = IntentFilter("android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED")
+            val btFilter = IntentFilter().apply {
+                addAction("android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED")
+                addAction(android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(android.bluetooth.BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED)
+                addAction(android.media.AudioManager.ACTION_HEADSET_PLUG)
+                addAction(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            }
             androidx.core.content.ContextCompat.registerReceiver(
                 this,
                 btReceiver,
@@ -629,14 +657,27 @@ class MediaPlaybackService : MediaLibraryService(), Player.Listener {
                 androidx.core.content.ContextCompat.RECEIVER_EXPORTED
             )
 
-btProxy = chromahub.rhythm.app.util.BtCodecInfo.getCodec(this) { info ->
-    if (info != null) {
-        btInfo = info
-        Log.d(TAG, "First Bluetooth codec config: $btInfo")
-    }
-}
+            btProxy = chromahub.rhythm.app.util.BtCodecInfo.getCodec(this) { info ->
+                if (info != null) {
+                    btInfo = info
+                    Log.d(TAG, "First Bluetooth codec config: $btInfo")
+                    updatePlaybackQuality()
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                audioManager?.registerAudioDeviceCallback(object : android.media.AudioDeviceCallback() {
+                    override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                        updatePlaybackQuality()
+                    }
+                    override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                        updatePlaybackQuality()
+                    }
+                }, android.os.Handler(android.os.Looper.getMainLooper()))
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting up Bluetooth codec monitoring", e)
+            Log.e(TAG, "Error setting up Bluetooth codec and audio device monitoring", e)
         }
 
         try {
@@ -914,6 +955,11 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
             monoProcessor = rhythmMonoAudioProcessor
         )
         rhythmPlayerEngine.initialize()
+        serviceScope.launch {
+            rhythmPlayerEngine.currentEngineFormat.collect {
+                updatePlaybackQuality()
+            }
+        }
         applyUsbExclusiveRoutingPreference()
         
         // The master player is exposed to MediaSession and used everywhere
@@ -952,6 +998,8 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
             
             // Update widget with current song info
             updateWidgetFromMediaItem(newPlayer.currentMediaItem)
+
+            updatePlaybackQuality()
             
             // Reinitialize audio effects with new session ID if session changed
             val newSessionId = (newPlayer as? ExoPlayer)?.audioSessionId ?: 0
@@ -2760,6 +2808,7 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
         
         // Update widget with new song info
         updateWidgetFromMediaItem(mediaItem)
+        updatePlaybackQuality()
 
         lastHandledControllerTransitionMediaId = transitionMediaId
     }
@@ -2807,6 +2856,203 @@ notificationManager.createNotificationChannel(sleepTimerChannel)
         } catch (e: Exception) {
             Log.e(TAG, "Error converting MediaItem to Song", e)
             null
+        }
+    }
+
+    private fun updatePlaybackQuality() {
+        try {
+            val mediaItem = if (::player.isInitialized) player.currentMediaItem else null
+            val song = mediaItem?.let { convertMediaItemToSong(it) }
+            val engineFormatInfo = if (::rhythmPlayerEngine.isInitialized) rhythmPlayerEngine.currentEngineFormat.value else null
+            val engineFormat = engineFormatInfo?.format ?: (if (::rhythmPlayerEngine.isInitialized) (rhythmPlayerEngine.masterPlayer as? ExoPlayer)?.audioFormat else null)
+            val decoderName = engineFormatInfo?.decoderName.orEmpty().ifBlank {
+                if (::rhythmPlayerEngine.isInitialized) rhythmPlayerEngine.getCurrentDecoderName() else ""
+            }
+
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val outputDevices = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            } else emptyArray()
+
+            val bluetoothDevice = outputDevices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER))
+            }
+            val usbDevice = outputDevices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
+            }
+            val wiredDevice = outputDevices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET
+            }
+
+            val isA2dpOn = try { audioManager.isBluetoothA2dpOn } catch (_: Exception) { true }
+            val mediaRouterSelectedRoute = try {
+                androidx.mediarouter.media.MediaRouter.getInstance(this).selectedRoute
+            } catch (_: Exception) { null }
+
+            val isSpeakerForced = mediaRouterSelectedRoute?.isDefault == true && usbDevice == null && wiredDevice == null
+
+            val isBt = (bluetoothDevice != null || btInfo != null) && isA2dpOn && !isSpeakerForced
+            val isUsb = usbDevice != null
+            val isWired = wiredDevice != null && !isBt && !isUsb
+
+            val isBitPerfect = isUsb && (appSettings.audioRoutingMode.value == "app")
+
+            val outputDeviceType: String
+            val outputDeviceName: String
+            when {
+                isUsb -> {
+                    outputDeviceType = if (isBitPerfect) "USB DAC (Bit-Perfect)" else "USB Audio Device"
+                    val devName = usbDevice.productName?.toString()?.takeIf { it.isNotBlank() }
+                    outputDeviceName = devName ?: "External USB DAC"
+                }
+                isBt -> {
+                    outputDeviceType = "Bluetooth (A2DP)"
+                    val devName = mediaRouterSelectedRoute?.name?.takeIf { !mediaRouterSelectedRoute.isDefault && it.isNotBlank() }
+                        ?: bluetoothDevice?.productName?.toString()?.takeIf { it.isNotBlank() }
+                    outputDeviceName = devName ?: "Bluetooth Audio Device"
+                }
+                isWired -> {
+                    outputDeviceType = "Wired Headphones (3.5mm)"
+                    val devName = wiredDevice.productName?.toString()?.takeIf { it.isNotBlank() }
+                    outputDeviceName = devName ?: "Wired Audio Output"
+                }
+                else -> {
+                    outputDeviceType = "Built-in Speaker"
+                    outputDeviceName = "Device Speaker"
+                }
+            }
+
+            val sourceCodec = song?.codec?.takeIf { it.isNotBlank() }
+                ?: engineFormat?.sampleMimeType?.substringAfterLast('/')?.uppercase(Locale.US)
+                ?: "Audio"
+            val sourceBitrate = (song?.bitrate ?: 0).takeIf { it > 0 }?.div(1000)
+                ?: (if (engineFormat != null && engineFormat.bitrate > 0) engineFormat.bitrate / 1000 else 0)
+            val sourceSampleRate = (song?.sampleRate ?: 0).takeIf { it > 0 }
+                ?: (engineFormat?.sampleRate ?: 0)
+            val sourceChannels = (song?.channels ?: 2).takeIf { it > 0 }
+                ?: (engineFormat?.channelCount ?: 2)
+
+            val decodedSampleRate = engineFormat?.sampleRate ?: sourceSampleRate
+            val decodedChannels = engineFormat?.channelCount ?: sourceChannels
+            val decodedMime = engineFormat?.sampleMimeType.orEmpty()
+            val decodedBitrate = if (engineFormat != null && engineFormat.bitrate > 0) engineFormat.bitrate / 1000 else sourceBitrate
+            val decodedBitDepth = when (engineFormat?.pcmEncoding) {
+                C.ENCODING_PCM_24BIT -> 24
+                C.ENCODING_PCM_32BIT -> 32
+                C.ENCODING_PCM_FLOAT -> 32
+                C.ENCODING_PCM_16BIT -> 16
+                else -> if (sourceSampleRate >= 88200 || (sourceCodec.contains("FLAC", ignoreCase = true) && sourceBitrate > 1500)) 24 else 16
+            }
+
+            val currentBtInfo = btInfo
+            val btCodec = if (isBt) currentBtInfo?.codec ?: "A2DP" else null
+            val btBitrate = if (isBt) currentBtInfo?.quality else null
+            val btSampleRate = if (isBt) currentBtInfo?.sampleRateHz else null
+            val btBitsPerSample = if (isBt) currentBtInfo?.bitsPerSample else null
+
+            val isResampled: Boolean
+            val resamplingDesc: String?
+            when {
+                isBitPerfect -> {
+                    isResampled = false
+                    resamplingDesc = "Bit-Perfect direct pipeline (Android HAL bypass, no resampling)"
+                }
+                isBt && btSampleRate != null && btSampleRate > 0 && sourceSampleRate > 0 -> {
+                    if (btSampleRate != sourceSampleRate) {
+                        isResampled = true
+                        resamplingDesc = "Resampled from ${PlaybackQualityInfo.formatSampleRate(sourceSampleRate)} to ${PlaybackQualityInfo.formatSampleRate(btSampleRate)} by Bluetooth stack"
+                    } else {
+                        isResampled = false
+                        resamplingDesc = "Direct sample rate match (${PlaybackQualityInfo.formatSampleRate(sourceSampleRate)})"
+                    }
+                }
+                else -> {
+                    isResampled = false
+                    resamplingDesc = null
+                }
+            }
+
+            val detectedQuality = AudioQualityDetector.detectQuality(
+                codec = sourceCodec,
+                sampleRateHz = if (sourceSampleRate > 0) sourceSampleRate else decodedSampleRate,
+                bitrateKbps = if (sourceBitrate > 0) sourceBitrate else decodedBitrate,
+                bitDepth = decodedBitDepth,
+                channelCount = if (sourceChannels > 0) sourceChannels else decodedChannels
+            )
+
+            val resolvedIcon = PlaybackQualityInfo.resolveIconRes(detectedQuality.qualityType, detectedQuality.qualityLabel)
+
+            val isPcmFloatSupported = HiFiCapabilityChecker.isSupported()
+            val nativeHalSampleRate = try {
+                (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 48000
+            } catch (_: Exception) { 48000 }
+            val isHardwareDecoder = DeviceCapabilitiesProvider.isLikelyHardwareDecoder(decoderName)
+
+            val outputQualityStatus: String = when {
+                isBitPerfect -> {
+                    "Bit-Perfect • Direct 1:1 hardware pass-through"
+                }
+                isBt -> {
+                    val isLossyBt = btCodec in listOf("SBC", "AAC")
+                    when {
+                        isLossyBt -> "Compressed via Bluetooth (${btCodec ?: "A2DP"}) • Lossy output"
+                        isResampled -> "Resampled to ${PlaybackQualityInfo.formatSampleRate(btSampleRate ?: 48000)} • Bluetooth limit"
+                        else -> "Full quality output • Hi-Res Bluetooth (${btCodec ?: "LDAC"})"
+                    }
+                }
+                sourceSampleRate > nativeHalSampleRate && !isBitPerfect -> {
+                    "Resampled to ${PlaybackQualityInfo.formatSampleRate(nativeHalSampleRate)} • Capped by Android audio HAL"
+                }
+                decodedBitDepth > 16 && !isPcmFloatSupported -> {
+                    "Truncated to 16-bit • Device lacks Hi-Fi float support"
+                }
+                decoderName.isNotBlank() && !isHardwareDecoder && sourceCodec in listOf("FLAC", "AAC", "MP3") -> {
+                    "Software decoder fallback • ${decoderName.substringAfterLast('.')}"
+                }
+                detectedQuality.isLossless -> {
+                    "Full quality output • Matched device capability"
+                }
+                else -> {
+                    "Full source quality reproduced"
+                }
+            }
+
+            val qualityInfo = PlaybackQualityInfo(
+                sourceCodec = sourceCodec,
+                sourceBitrateKbps = sourceBitrate,
+                sourceSampleRateHz = sourceSampleRate,
+                sourceBitDepth = decodedBitDepth,
+                sourceChannels = sourceChannels,
+                decoderName = decoderName,
+                decodedSampleRateHz = decodedSampleRate,
+                decodedBitDepth = decodedBitDepth,
+                decodedChannels = decodedChannels,
+                decodedMimeType = decodedMime,
+                decodedBitrateKbps = decodedBitrate,
+                outputDeviceName = outputDeviceName,
+                outputDeviceType = outputDeviceType,
+                isBluetooth = isBt,
+                bluetoothCodec = btCodec,
+                bluetoothBitrate = btBitrate,
+                bluetoothSampleRateHz = btSampleRate,
+                bluetoothBitDepth = btBitsPerSample,
+                isResampled = isResampled,
+                resamplingDescription = resamplingDesc,
+                isBitPerfect = isBitPerfect,
+                qualityType = detectedQuality.qualityType,
+                qualityLabel = detectedQuality.qualityLabel,
+                qualityDescription = detectedQuality.qualityDescription,
+                outputQualityStatus = outputQualityStatus,
+                iconResId = resolvedIcon
+            )
+
+            _currentPlaybackQuality.value = qualityInfo
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating playback quality telemetry", e)
         }
     }
     

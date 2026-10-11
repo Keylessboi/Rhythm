@@ -237,6 +237,18 @@ fun PlaybackSettingsScreen(
                         toggleState = if (isOffloadEnforced) true else if (isBitPerfect) false else audioOffloadEnabled,
                         onToggleChange = { if (!isOffloadEnforced && !isBitPerfect) appSettings.setAudioOffloadEnabled(it) },
                         enabled = !isOffloadEnforced && !isBitPerfect
+                    ),
+                    SettingItem(
+                        icon = MaterialSymbolIcon("tune", filled = true),
+                        title = context.getString(R.string.settings_category_audio_engine_title),
+                        description = context.getString(R.string.settings_category_audio_engine_desc),
+                        onClick = { onNavigateTo(SettingsRoutes.AUDIO_ENGINE) }
+                    ),
+                    SettingItem(
+                        icon = MaterialSymbolIcon("perm_device_information", filled = true),
+                        title = context.getString(R.string.settings_category_device_capabilities_title),
+                        description = context.getString(R.string.settings_category_device_capabilities_desc),
+                        onClick = { onNavigateTo(SettingsRoutes.DEVICE_CAPABILITIES) }
                     )
                 )
             ),

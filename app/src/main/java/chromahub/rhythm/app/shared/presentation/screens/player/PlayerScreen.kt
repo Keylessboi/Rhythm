@@ -371,6 +371,10 @@ fun PlayerScreen(
             }
         }
 
+        LaunchedEffect(Unit) {
+            onRefreshDevices()
+        }
+
         ExpressivePlayerScreen(
             song = song,
             isPlaying = isPlaying,

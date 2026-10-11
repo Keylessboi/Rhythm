@@ -101,6 +101,9 @@ import chromahub.rhythm.app.shared.presentation.components.bottomsheets.AddToPla
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.PlaybackBottomSheet
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.QueueBottomSheet
 import chromahub.rhythm.app.shared.presentation.components.bottomsheets.SongInfoBottomSheet
+import chromahub.rhythm.app.shared.presentation.components.bottomsheets.PlaybackQualityBottomSheet
+import chromahub.rhythm.app.shared.presentation.screens.settings.AudioRoutingDialog
+import chromahub.rhythm.app.infrastructure.service.MediaPlaybackService
 import chromahub.rhythm.app.shared.presentation.components.dialogs.PlaybackPitchDialog
 import chromahub.rhythm.app.shared.presentation.components.dialogs.PlaybackSpeedDialog
 import chromahub.rhythm.app.shared.presentation.components.player.SleepTimerBottomSheetNew
@@ -326,6 +329,11 @@ fun ExpressivePlayerScreen(
     val playerAccentBackgroundEnabled by appSettings.playerAccentBackgroundEnabled.collectAsState()
     val playerMergeControlsToBottom by appSettings.playerMergeControlsToBottom.collectAsState()
     val playerShowAudioQualityBadges by appSettings.playerShowAudioQualityBadges.collectAsState()
+    val expressiveQualityBadgeAlwaysVisible by appSettings.expressiveQualityBadgeAlwaysVisible.collectAsState()
+    val currentPlaybackQuality by (musicViewModel?.currentPlaybackQuality ?: MediaPlaybackService.currentPlaybackQuality).collectAsState()
+    var showPlaybackQualitySheet by remember { mutableStateOf(false) }
+    var showAudioRoutingDialog by remember { mutableStateOf(false) }
+    var qualityBadgeRevealToken by remember { mutableIntStateOf(0) }
     val expressiveBottomButtonsNormal by appSettings.expressiveBottomButtonsNormal.collectAsState()
     val expressiveHiddenBottomButtonsNormal by appSettings.expressiveHiddenBottomButtonsNormal.collectAsState()
     val expressiveBottomButtonsMerge by appSettings.expressiveBottomButtonsMerge.collectAsState()
@@ -1187,22 +1195,21 @@ fun ExpressivePlayerScreen(
                                     clip = true
                                 }
                                 .pointerInput(showLyrics, lyricsVisible, gestureArtworkDoubleTap, gestureArtworkSingleTap) {
-                                    if (gestureArtworkDoubleTap || (gestureArtworkSingleTap && showLyrics)) {
-                                        detectTapGestures(
-                                            onDoubleTap = {
-                                                if (gestureArtworkDoubleTap) {
-                                                    HapticUtils.performHapticFeedback(context, haptic, HapticType.HEAVY)
-                                                    onPlayPause()
-                                                }
-                                            },
-                                            onTap = {
-                                                if (gestureArtworkSingleTap && showLyrics) {
-                                                    HapticUtils.performHapticFeedback(context, haptic, HapticType.LIGHT)
-                                                    onToggleLyrics()
-                                                }
+                                    detectTapGestures(
+                                        onDoubleTap = if (gestureArtworkDoubleTap) {
+                                            {
+                                                HapticUtils.performHapticFeedback(context, haptic, HapticType.HEAVY)
+                                                onPlayPause()
                                             }
-                                        )
-                                    }
+                                        } else null,
+                                        onTap = {
+                                            qualityBadgeRevealToken++
+                                            if (gestureArtworkSingleTap && showLyrics) {
+                                                HapticUtils.performHapticFeedback(context, haptic, HapticType.LIGHT)
+                                                onToggleLyrics()
+                                            }
+                                        }
+                                    )
                                 }
                                 .pointerInput(gesturePlayerSwipeTracks) {
                                     if (gesturePlayerSwipeTracks) {
@@ -2421,14 +2428,17 @@ fun ExpressivePlayerScreen(
                 }
 
                 // Audio quality icon at top-right — fades in once the (debounced) track settles
-                // and auto-hides after 5 seconds
+                // and auto-hides after 5 seconds (or stays visible if configured)
                 if (playerShowAudioQualityBadges) {
                     debouncedSong.value?.let { displaySong ->
                         AudioQualityIcon(
                             song = displaySong,
+                            playbackQuality = currentPlaybackQuality,
+                            onClick = { showPlaybackQualitySheet = true },
                             iconSize = 40.dp,
                             padding = 6.dp,
-                            autoHideAfterMs = 5000,
+                            autoHideAfterMs = if (expressiveQualityBadgeAlwaysVisible) 0L else 5000L,
+                            revealTrigger = qualityBadgeRevealToken,
                             tint = when {
                                 showDarkBg -> Color.White
                                 useAccentBackground -> accentFg
@@ -2483,6 +2493,32 @@ fun ExpressivePlayerScreen(
         chromahub.rhythm.app.shared.presentation.components.bottomsheets.DeviceConfigurationBottomSheet(
             musicViewModel = musicViewModel,
             onDismiss = { showDeviceConfig = false }
+        )
+    }
+
+    val currentSongForQuality = debouncedSong.value ?: song
+    if (showPlaybackQualitySheet && currentSongForQuality != null) {
+        PlaybackQualityBottomSheet(
+            song = currentSongForQuality,
+            playbackQuality = currentPlaybackQuality,
+            onDismissRequest = { showPlaybackQualitySheet = false },
+            onViewSongInfo = {
+                showPlaybackQualitySheet = false
+                onSongInfoClick()
+            },
+            onRouteAudio = {
+                showPlaybackQualitySheet = false
+                showAudioRoutingDialog = true
+            }
+        )
+    }
+
+    if (showAudioRoutingDialog) {
+        AudioRoutingDialog(
+            onDismiss = { showAudioRoutingDialog = false },
+            appSettings = appSettings,
+            context = context,
+            haptic = haptic
         )
     }
 }

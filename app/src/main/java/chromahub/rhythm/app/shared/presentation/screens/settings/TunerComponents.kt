@@ -445,6 +445,7 @@ fun toMaterial3SettingsItem(
 ): Material3SettingsItem {
     return Material3SettingsItem(
         icon = item.icon,
+        palette = item.palette,
         title = { Text(item.title) },
         description = description,
         trailingContent = if (item.toggleState != null && item.onClick != null) {

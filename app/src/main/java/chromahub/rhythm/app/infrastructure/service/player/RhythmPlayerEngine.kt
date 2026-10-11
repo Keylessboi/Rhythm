@@ -21,6 +21,11 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import chromahub.rhythm.app.core.device.HiFiCapabilityChecker
+import chromahub.rhythm.app.core.device.DeviceCapabilitiesProvider
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.DefaultDataSource
@@ -112,6 +117,62 @@ class RhythmPlayerEngine(
     private val _activeAudioSessionId = MutableStateFlow(0)
     val activeAudioSessionId: StateFlow<Int> = _activeAudioSessionId.asStateFlow()
 
+    private val _currentEngineFormat = MutableStateFlow<EngineAudioFormat?>(null)
+    val currentEngineFormat: StateFlow<EngineAudioFormat?> = _currentEngineFormat.asStateFlow()
+
+    private var playerADecoderName: String = ""
+    private var playerBDecoderName: String = ""
+
+    private val analyticsListenerA = object : AnalyticsListener {
+        override fun onAudioDecoderInitialized(
+            eventTime: AnalyticsListener.EventTime,
+            decoderName: String,
+            initializedTimestampMs: Long,
+            initializationDurationMs: Long
+        ) {
+            playerADecoderName = decoderName
+            val format = (playerA as? ExoPlayer)?.audioFormat ?: playerA.currentTracks.getFirstSelectedTrackFormatByType(C.TRACK_TYPE_AUDIO)
+            if (format != null && masterPlayer === playerA) {
+                _currentEngineFormat.value = EngineAudioFormat(format, decoderName)
+            }
+        }
+
+        override fun onAudioInputFormatChanged(
+            eventTime: AnalyticsListener.EventTime,
+            format: androidx.media3.common.Format,
+            decoderReuseEvaluation: DecoderReuseEvaluation?
+        ) {
+            if (masterPlayer === playerA) {
+                _currentEngineFormat.value = EngineAudioFormat(format, playerADecoderName)
+            }
+        }
+    }
+
+    private val analyticsListenerB = object : AnalyticsListener {
+        override fun onAudioDecoderInitialized(
+            eventTime: AnalyticsListener.EventTime,
+            decoderName: String,
+            initializedTimestampMs: Long,
+            initializationDurationMs: Long
+        ) {
+            playerBDecoderName = decoderName
+            val format = (playerB as? ExoPlayer)?.audioFormat ?: playerB.currentTracks.getFirstSelectedTrackFormatByType(C.TRACK_TYPE_AUDIO)
+            if (format != null && masterPlayer === playerB) {
+                _currentEngineFormat.value = EngineAudioFormat(format, decoderName)
+            }
+        }
+
+        override fun onAudioInputFormatChanged(
+            eventTime: AnalyticsListener.EventTime,
+            format: androidx.media3.common.Format,
+            decoderReuseEvaluation: DecoderReuseEvaluation?
+        ) {
+            if (masterPlayer === playerB) {
+                _currentEngineFormat.value = EngineAudioFormat(format, playerBDecoderName)
+            }
+        }
+    }
+
     // Audio Focus Management — managed manually so both players share a single focus request
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -168,13 +229,15 @@ class RhythmPlayerEngine(
         
         override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
             Log.d(TAG, "Tracks changed")
-            val format = tracks.getFirstSelectedTrackFormatByType(C.TRACK_TYPE_AUDIO)
+            val format = tracks.getFirstSelectedTrackFormatByType(C.TRACK_TYPE_AUDIO) ?: (masterPlayer as? ExoPlayer)?.audioFormat
             if (format != null) {
                 val info = ReplayGainUtil.parse(format)
                 masterPlayer.currentMediaItem?.mediaId?.let { id ->
                     ReplayGainCache.put(id, info)
                 }
                 activeReplayGainProcessor?.setRootFormat(format)
+                val currentDec = if (masterPlayer === playerA) playerADecoderName else playerBDecoderName
+                _currentEngineFormat.value = EngineAudioFormat(format, currentDec)
             }
         }
 
@@ -274,6 +337,8 @@ class RhythmPlayerEngine(
         playerA.volume = initVolume
 
         playerA.addListener(masterPlayerListener)
+        playerA.addAnalyticsListener(analyticsListenerA)
+        playerB.addAnalyticsListener(analyticsListenerB)
         activeReplayGainProcessor = aReplayGain
 
         _activeAudioSessionId.value = playerA.audioSessionId
@@ -339,6 +404,26 @@ class RhythmPlayerEngine(
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
+        val appSettings = AppSettings.getInstance(context)
+        val floatOutputPref = appSettings.audioEngineFloatOutput.value && HiFiCapabilityChecker.isSupported()
+
+        val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+            val defaultDecoders = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                mimeType,
+                requiresSecureDecoder,
+                requiresTunnelingDecoder
+            )
+            val disabled = appSettings.audioEngineDisabledDecoders.value
+            val preferHw = appSettings.audioEnginePreferHardware.value
+
+            val filtered = if (disabled.isEmpty()) defaultDecoders else defaultDecoders.filter { it.name !in disabled }
+            if (preferHw) {
+                filtered.sortedByDescending { if (DeviceCapabilitiesProvider.isLikelyHardwareDecoder(it.name)) 1 else 0 }
+            } else {
+                filtered
+            }
+        }
+
         val renderersFactory = object : DefaultRenderersFactory(context) {
             override fun buildAudioSink(
                 context: Context,
@@ -392,7 +477,7 @@ class RhythmPlayerEngine(
                     }
                 }
                 val baseSink = DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableFloatOutput(floatOutputPref)
                     .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
                     .setAudioProcessorChain(processorChain)
                     .build()
@@ -409,7 +494,13 @@ class RhythmPlayerEngine(
                 }
             }
         }.apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            val extensionMode = if (appSettings.decoderExtensionsEnabled.value) {
+                DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+            } else {
+                DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+            }
+            setExtensionRendererMode(extensionMode)
+            setMediaCodecSelector(mediaCodecSelector)
         }
 
         val audioAttributes = AudioAttributes.Builder()
@@ -456,7 +547,6 @@ class RhythmPlayerEngine(
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(resolvingDataSourceFactory)
 
-        val appSettings = AppSettings.getInstance(context)
         val defaultParams = TrackSelectionParameters.DEFAULT
         val trackSelectionParameters = buildTrackSelectionParameters(defaultParams, appSettings)
 
@@ -743,6 +833,14 @@ class RhythmPlayerEngine(
 
         _activeAudioSessionId.value = playerA.audioSessionId
 
+        val swappedFormat = (playerA as? ExoPlayer)?.audioFormat ?: playerA.currentTracks.getFirstSelectedTrackFormatByType(C.TRACK_TYPE_AUDIO)
+        val swappedDecoder = if (playerA === incomingPlayer) {
+            if (incomingPlayer === playerA) playerADecoderName else playerBDecoderName
+        } else playerADecoderName
+        if (swappedFormat != null) {
+            _currentEngineFormat.value = EngineAudioFormat(swappedFormat, swappedDecoder)
+        }
+
         if (playerA.playbackState == Player.STATE_IDLE) {
             playerA.prepare()
         }
@@ -948,14 +1046,30 @@ class RhythmPlayerEngine(
         scope.cancel()
         abandonAudioFocus()
         if (::playerA.isInitialized) {
+            playerA.removeAnalyticsListener(analyticsListenerA)
             playerA.removeListener(masterPlayerListener)
             playerA.release()
         }
-        if (::playerB.isInitialized) playerB.release()
+        if (::playerB.isInitialized) {
+            playerB.removeAnalyticsListener(analyticsListenerB)
+            playerB.release()
+        }
         isReleased = true
         Log.d(TAG, "RhythmPlayerEngine released.")
     }
+
+    fun getCurrentAudioFormat(): androidx.media3.common.Format? =
+        _currentEngineFormat.value?.format ?: (masterPlayer as? ExoPlayer)?.audioFormat
+
+    fun getCurrentDecoderName(): String =
+        _currentEngineFormat.value?.decoderName.orEmpty()
 }
+
+data class EngineAudioFormat(
+    val format: androidx.media3.common.Format,
+    val decoderName: String = "",
+    val timestamp: Long = System.currentTimeMillis()
+)
 
 private fun androidx.media3.common.Tracks.getFirstSelectedTrackFormatByType(trackType: Int): androidx.media3.common.Format? {
     for (group in groups) {

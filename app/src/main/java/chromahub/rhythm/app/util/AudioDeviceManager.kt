@@ -182,7 +182,10 @@ class AudioDeviceManager(private val context: Context) {
     /**
      * Refresh the list of available audio devices
      */
-    fun refreshDevices() {
+    fun refreshDevices(force: Boolean = false) {
+        if (force) {
+            isManuallySelected = false
+        }
         try {
             val devices = mutableListOf<PlaybackLocation>()
             
@@ -230,7 +233,7 @@ class AudioDeviceManager(private val context: Context) {
 
             try {
                 val usbDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter {
-                    (it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET) && it.isSink
+                    (it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET || it.type == AudioDeviceInfo.TYPE_USB_ACCESSORY) && it.isSink
                 }
                 for (usb in usbDevices) {
                     val name = usb.productName.toString().takeIf { it.isNotBlank() } ?: "USB DAC / Audio"
@@ -259,7 +262,8 @@ class AudioDeviceManager(private val context: Context) {
                 updateCurrentDeviceAfterRefresh(devices)
             } else {
                 // Even if the device list hasn't changed, we should check if the active device has changed
-                if (!isManuallySelected) {
+                if (!isManuallySelected || force) {
+                    if (force) isManuallySelected = false
                     detectActiveDevice(devices)
                 }
             }
@@ -343,7 +347,6 @@ class AudioDeviceManager(private val context: Context) {
                 Log.d(TAG, "Skipping auto-detection because device was manually selected")
                 
                 // Reset the manual selection flag after 10 seconds
-                // In a real implementation, you would use a Handler or coroutine with delay
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     Log.d(TAG, "Resetting manual selection flag")
                     isManuallySelected = false
@@ -353,7 +356,7 @@ class AudioDeviceManager(private val context: Context) {
             }
             
             val isUsbActive = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-                (it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET) && it.isSink
+                (it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET || it.type == AudioDeviceInfo.TYPE_USB_ACCESSORY) && it.isSink
             }
 
             // First check if Bluetooth is active
@@ -361,9 +364,16 @@ class AudioDeviceManager(private val context: Context) {
             
             // Then check if wired headset is connected
             val isWiredHeadsetActive = isWiredHeadsetConnected()
+
+            val mediaRouterSelectedRoute = try {
+                androidx.mediarouter.media.MediaRouter.getInstance(context).selectedRoute
+            } catch (_: Exception) { null }
             
             // Determine the active device based on the checks
             val activeDevice = when {
+                mediaRouterSelectedRoute != null && mediaRouterSelectedRoute.isDefault && !isWiredHeadsetActive && !isUsbActive -> {
+                    devices.find { it.id == DEVICE_SPEAKER }
+                }
                 isUsbActive -> {
                     devices.find { it.id.startsWith(DEVICE_USB_PREFIX) }
                 }
@@ -1562,24 +1572,38 @@ class AudioDeviceManager(private val context: Context) {
      */
     fun isBluetoothActive(): Boolean {
         try {
-            // For Android 6.0+ we can check the active audio devices
             val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            
-            // Check if any Bluetooth device is active
-            val isBluetoothActive = devices.any { 
+            val hasBtSink = devices.any { 
                 (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || 
-                 it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) && 
+                 it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                 (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER))) && 
                 it.isSink
             }
-            
-            Log.d(TAG, "Bluetooth active check (API ${Build.VERSION.SDK_INT}): $isBluetoothActive")
-            return isBluetoothActive
+            if (!hasBtSink) return false
+
+            try {
+                val mediaRouter = androidx.mediarouter.media.MediaRouter.getInstance(context)
+                val selectedRoute = mediaRouter.selectedRoute
+                if (selectedRoute.isDefault) {
+                    Log.d(TAG, "Bluetooth device present, but MediaRouter selectedRoute is default speaker")
+                    return false
+                }
+            } catch (_: Exception) {}
+
+            val isA2dpOn = try { audioManager.isBluetoothA2dpOn } catch (_: Exception) { true }
+            if (!isA2dpOn) {
+                Log.d(TAG, "Bluetooth device present, but audioManager.isBluetoothA2dpOn is false")
+                return false
+            }
+
+            Log.d(TAG, "Bluetooth active check: true")
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "Error checking Bluetooth active status: ${e.message}", e)
             return false
         }
     }
-    
+
     /**
      * Find the specific Bluetooth device that is currently active
      */
@@ -1591,13 +1615,30 @@ class AudioDeviceManager(private val context: Context) {
         }
         
         try {
+            try {
+                val mediaRouter = androidx.mediarouter.media.MediaRouter.getInstance(context)
+                val selectedRoute = mediaRouter.selectedRoute
+                if (!selectedRoute.isDefault && selectedRoute.name.isNotBlank()) {
+                    val matchingByRouter = bluetoothDevices.find {
+                        it.name.equals(selectedRoute.name, ignoreCase = true) ||
+                        it.name.contains(selectedRoute.name, ignoreCase = true) ||
+                        selectedRoute.name.contains(it.name, ignoreCase = true)
+                    }
+                    if (matchingByRouter != null) {
+                        Log.d(TAG, "Matched active Bluetooth device via MediaRouter: ${matchingByRouter.name}")
+                        return matchingByRouter
+                    }
+                }
+            } catch (_: Exception) {}
+
             // For Android 6.0+ we can check the active audio devices
             val audioDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             
             // Find active Bluetooth devices
             val activeBluetoothDevices = audioDevices.filter { 
                 (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || 
-                 it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) && 
+                 it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                 (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER))) && 
                 it.isSink
             }
             

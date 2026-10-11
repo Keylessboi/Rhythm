@@ -147,6 +147,14 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import chromahub.rhythm.app.features.streaming.presentation.viewmodel.StreamingMusicViewModel
 import chromahub.rhythm.app.features.streaming.presentation.viewmodel.StreamingSyncStage
 import chromahub.rhythm.app.core.domain.model.SourceType
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.bluetooth.BluetoothA2dp
+import android.media.AudioManager
+import androidx.mediarouter.media.MediaRouter
+import androidx.mediarouter.media.MediaRouteSelector
+import androidx.mediarouter.media.MediaControlIntent
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
@@ -155,6 +163,25 @@ class MainActivity : AppCompatActivity() {
     private val appUpdaterViewModel: AppUpdaterViewModel by viewModels() // Inject AppUpdaterViewModel
     private val streamingMusicViewModel: StreamingMusicViewModel by viewModels()
     private lateinit var appSettings: AppSettings // Declare AppSettings
+
+    private var mediaRouter: MediaRouter? = null
+    private val mediaRouterCallback = object : MediaRouter.Callback() {
+        override fun onRouteSelected(router: MediaRouter, route: MediaRouter.RouteInfo, reason: Int) {
+            Log.d(TAG, "MediaRouter onRouteSelected: ${route.name} (reason=$reason)")
+            musicViewModel.refreshAudioDevices()
+        }
+        override fun onRouteChanged(router: MediaRouter, route: MediaRouter.RouteInfo) {
+            Log.d(TAG, "MediaRouter onRouteChanged: ${route.name}")
+            musicViewModel.refreshAudioDevices()
+        }
+    }
+
+    private val audioRoutingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Log.d(TAG, "Audio routing broadcast received: ${intent?.action}")
+            musicViewModel.refreshAudioDevices()
+        }
+    }
     
     companion object {
         const val DISPLAY_AUDIO_EFFECT_CONTROL_PANEL_REQUEST = 1002
@@ -1094,8 +1121,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        try {
+            val filter = IntentFilter().apply {
+                addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED)
+                addAction(AudioManager.ACTION_HEADSET_PLUG)
+                addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            }
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                audioRoutingReceiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register audio routing receiver", e)
+        }
+
+        try {
+            mediaRouter = MediaRouter.getInstance(this).also { router ->
+                val selector = MediaRouteSelector.Builder()
+                    .addControlCategory(MediaControlIntent.CATEGORY_LIVE_AUDIO)
+                    .build()
+                router.addCallback(selector, mediaRouterCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register MediaRouter callback", e)
+        }
+        musicViewModel.refreshAudioDevices()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "MainActivity onResume: refreshing audio devices")
+        musicViewModel.refreshAudioDevices()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            Log.d(TAG, "MainActivity onWindowFocusChanged(true): refreshing audio devices")
+            musicViewModel.refreshAudioDevices()
+        }
+    }
+
     override fun onStop() {
         super.onStop()
+        try {
+            unregisterReceiver(audioRoutingReceiver)
+        } catch (_: Exception) {}
+        try {
+            mediaRouter?.removeCallback(mediaRouterCallback)
+        } catch (_: Exception) {}
         musicViewModel.ensurePlaylistsSaved()
     }
 

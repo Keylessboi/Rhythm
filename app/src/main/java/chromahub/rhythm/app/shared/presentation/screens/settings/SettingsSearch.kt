@@ -1299,6 +1299,33 @@ fun buildSettingsSearchIndex(context: Context): List<SearchableSettingItem> {
             route = SettingsRoutes.ABOUT,
             parentScreen = context.getString(R.string.settings_section_updates_info)
         ))
+        add(SearchableSettingItem(
+            id = "native_capabilities",
+            title = context.getString(R.string.settings_category_native_capabilities_title),
+            description = context.getString(R.string.settings_category_native_capabilities_desc),
+            keywords = listOf("native", "device", "hardware", "capabilities", "dac", "sample rate", "buffer", "hal", "hifi", "pro audio", "cpu", "ram", "soc"),
+            icon = MaterialSymbolIcon("perm_device_information", filled = true),
+            route = SettingsRoutes.NATIVE_CAPABILITIES,
+            parentScreen = context.getString(R.string.settings_about_title)
+        ))
+        add(SearchableSettingItem(
+            id = "external_capabilities",
+            title = context.getString(R.string.settings_category_external_capabilities_title),
+            description = context.getString(R.string.settings_category_external_capabilities_desc),
+            keywords = listOf("external", "audio engine", "decoder", "codec", "software", "mediacodec", "exoplayer", "pcm float", "flac", "opus", "aac"),
+            icon = MaterialSymbolIcon("graphic_eq", filled = true),
+            route = SettingsRoutes.EXTERNAL_CAPABILITIES,
+            parentScreen = context.getString(R.string.settings_about_title)
+        ))
+        add(SearchableSettingItem(
+            id = "decoder_extensions",
+            title = context.getString(R.string.settings_category_decoder_extensions_title),
+            description = context.getString(R.string.settings_category_decoder_extensions_desc),
+            keywords = listOf("decoder extensions", "fallback engines", "ffmpeg", "midi", "dolby", "atmos", "ac4", "ac3", "eac3", "alac", "wma", "truehd", "dts", "exoplayer"),
+            icon = MaterialSymbolIcon("extension", filled = true),
+            route = SettingsRoutes.DECODER_EXTENSIONS,
+            parentScreen = context.getString(R.string.settings_about_title)
+        ))
         
         // Advanced Section
         add(SearchableSettingItem(

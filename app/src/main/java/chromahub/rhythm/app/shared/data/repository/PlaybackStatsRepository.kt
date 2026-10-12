@@ -7,8 +7,6 @@ package chromahub.rhythm.app.shared.data.repository
 
 import android.content.Context
 import com.google.gson.Gson
-import com.google.gson.JsonElement
-import com.google.gson.reflect.TypeToken
 import chromahub.rhythm.app.shared.data.model.Song
 import chromahub.rhythm.app.util.GenreUtils
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +66,8 @@ class PlaybackStatsRepository private constructor(private val context: Context) 
     private val gson = Gson()
     private val historyFile = File(context.applicationContext.filesDir, "playback_history.json")
     private val fileLock = Any()
-    private val eventsType = object : TypeToken<MutableList<PlaybackEvent>>() {}.type
+    // Parsed events are cached between reads, see PlaybackHistoryStore.
+    private val historyStore = PlaybackHistoryStore(historyFile, gson)
     
     companion object {
         @Volatile
@@ -710,9 +709,7 @@ class PlaybackStatsRepository private constructor(private val context: Context) 
      */
     fun clearHistory() {
         synchronized(fileLock) {
-            if (historyFile.exists()) {
-                historyFile.delete()
-            }
+            historyStore.delete()
         }
         _statsSummary.value = null
     }
@@ -720,32 +717,15 @@ class PlaybackStatsRepository private constructor(private val context: Context) 
     // Private helper methods
     
     private fun readEvents(): List<PlaybackEvent> = synchronized(fileLock) { 
-        readEventsLocked() 
+        historyStore.snapshot()
     }
     
-    private fun readEventsLocked(): MutableList<PlaybackEvent> {
-        if (!historyFile.exists()) {
-            return mutableListOf()
-        }
-        val raw = runCatching { historyFile.readText() }
-            .getOrNull()
-            ?.takeIf { it.isNotBlank() }
-            ?: return mutableListOf()
-        
-        return runCatching {
-            val element = gson.fromJson(raw, JsonElement::class.java)
-            if (element.isJsonArray) {
-                gson.fromJson<MutableList<PlaybackEvent>>(element, eventsType)
-            } else {
-                mutableListOf()
-            }
-        }.getOrElse { mutableListOf() }
-    }
+    // Both go through the cached store. readEvents() returns a shared immutable snapshot;
+    // readEventsLocked() a private copy for the read-modify-write callers.
+    private fun readEventsLocked(): MutableList<PlaybackEvent> = historyStore.readMutable()
     
     private fun writeEventsLocked(events: List<PlaybackEvent>) {
-        runCatching {
-            historyFile.writeText(gson.toJson(events))
-        }
+        historyStore.write(events)
     }
     
     private fun mergeSongEvents(events: List<PlaybackEvent>): List<PlaybackSegment> {

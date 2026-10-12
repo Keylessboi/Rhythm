@@ -102,6 +102,7 @@ import chromahub.rhythm.app.features.local.presentation.navigation.LocalNavigati
 import chromahub.rhythm.app.shared.data.repository.UserPreferencesRepository
 import chromahub.rhythm.app.shared.data.repository.PlaybackStatsRepository
 import chromahub.rhythm.app.shared.data.repository.StatsTimeRange
+import chromahub.rhythm.app.shared.data.repository.liveListeningMinutes
 import chromahub.rhythm.app.shared.presentation.components.common.RhythmWavyProgressLoader
 import chromahub.rhythm.app.shared.presentation.viewmodel.AppModeViewModel
 import chromahub.rhythm.app.features.local.presentation.viewmodel.MusicViewModel
@@ -392,7 +393,6 @@ private fun RhythmGuardWarningHost(
     val listeningTime by appSettings.listeningTime.collectAsState()
 
     val currentSong by musicViewModel.currentSong.collectAsState()
-    val currentProgress by musicViewModel.progress.collectAsState()
     val currentDurationMs by musicViewModel.duration.collectAsState()
     val currentIsPlaying by musicViewModel.isPlaying.collectAsState()
     val currentPlaybackDevice by musicViewModel.currentDevice.collectAsState()
@@ -554,18 +554,21 @@ private fun RhythmGuardWarningHost(
         }
     }
 
-    LaunchedEffect(dailyListeningStats, songsPlayed, listeningTime, currentProgress, currentDurationMs, currentIsPlaying) {
+    // loadSummary reads and parses the whole playback_history.json (about 1 MB of garbage
+    // per call at 300 events), so it runs when the inputs really change, not on every 100 ms
+    // progress tick. The live part is added from the progress flow without touching the disk or
+    // recomposing this scope.
+    LaunchedEffect(dailyListeningStats, songsPlayed, listeningTime, currentDurationMs, currentIsPlaying) {
         val todaySummary = runCatching {
             playbackStatsRepository.loadSummary(StatsTimeRange.TODAY)
         }.getOrNull()
         val dbDurationMs = todaySummary?.totalDurationMs ?: 0L
-        val activeSessionDurationMs = if (currentIsPlaying && currentDurationMs > 0) {
-            (currentProgress * currentDurationMs).toLong()
-        } else {
-            0L
+        todayExposureMinutes = liveListeningMinutes(dbDurationMs, currentIsPlaying, currentDurationMs, musicViewModel.progress.value)
+        if (currentIsPlaying && currentDurationMs > 0) {
+            musicViewModel.progress.collect { progress ->
+                todayExposureMinutes = liveListeningMinutes(dbDurationMs, currentIsPlaying, currentDurationMs, progress)
+            }
         }
-        val totalMs = dbDurationMs + activeSessionDurationMs
-        todayExposureMinutes = (totalMs / 60000L).toInt().coerceAtLeast(0)
     }
 
     LaunchedEffect(auraMode, manualWarningsEnabled, currentSong) {
